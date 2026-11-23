@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# =============================================================================
+# nidps-iptables - the ONLY command NIDPS may run as root via sudo.
+#
+# Plain `sudo iptables` would be root-equivalent (iptables --modprobe=<any program>),
+# so instead NIDPS gets sudo on this wrapper, which accepts nothing but the exact
+# rule shapes NIDPS uses, on its own NIDPS chain:
+#
+#   <iptables|ip6tables> -N NIDPS
+#   <iptables|ip6tables> -F NIDPS
+#   <iptables|ip6tables> -C|-I <INPUT|FORWARD> [1] -j NIDPS
+#   <iptables|ip6tables> -C|-D NIDPS -s <ip> -j DROP
+#   <iptables|ip6tables> -I NIDPS 1 -s <ip> -j DROP
+#
+# Install (root-owned, not writable by anyone else):
+#   sudo install -o root -g root -m 0755 backend/scripts/nidps-iptables /usr/local/sbin/nidps-iptables
+# and in /etc/sudoers.d/nidps:
+#   <user> ALL=(root) NOPASSWD: /usr/local/sbin/nidps-iptables
+# =============================================================================
+set -euo pipefail
+
+deny() { echo "nidps-iptables: refused: $*" >&2; exit 2; }
+
+is_ipv4() {
+  [[ $1 =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
+  for o in "${BASH_REMATCH[@]:1}"; do ((10#$o <= 255)) || return 1; done
+}
+is_ipv6() { [[ $1 =~ ^[0-9a-fA-F:]{2,39}$ && $1 == *:*:* ]]; }
+
+[[ $# -ge 3 ]] || deny "too few arguments"
+tool=$1; shift
+case "$tool" in
+  iptables) valid_ip=is_ipv4 ;;
+  ip6tables) valid_ip=is_ipv6 ;;
+  *) deny "tool must be iptables or ip6tables" ;;
+esac
+
+args="$*"
+case "$#" in
+  2) [[ $args == "-N NIDPS" || $args == "-F NIDPS" ]] || deny "$args" ;;
+  4) [[ $1 == "-C" && ($2 == INPUT || $2 == FORWARD) && $3 == "-j" && $4 == NIDPS ]] || deny "$args" ;;
+  5) [[ $1 == "-I" && ($2 == INPUT || $2 == FORWARD) && $3 == 1 && $4 == "-j" && $5 == NIDPS ]] || deny "$args" ;;
+  6) [[ ($1 == "-C" || $1 == "-D") && $2 == NIDPS && $3 == "-s" && $5 == "-j" && $6 == DROP ]] && $valid_ip "$4" || deny "$args" ;;
+  7) [[ $1 == "-I" && $2 == NIDPS && $3 == 1 && $4 == "-s" && $6 == "-j" && $7 == DROP ]] && $valid_ip "$5" || deny "$args" ;;
+  *) deny "$args" ;;
+esac
+
+if [[ ${NIDPS_WRAPPER_DRY:-} == 1 ]]; then echo "$tool $args"; exit 0; fi
+for dir in /usr/sbin /sbin; do
+  [[ -x $dir/$tool ]] && exec "$dir/$tool" "$@"
+done
+deny "$tool not found"

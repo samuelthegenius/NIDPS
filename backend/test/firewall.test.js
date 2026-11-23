@@ -24,6 +24,7 @@ function setup({ env = {}, failOn = null } = {}) {
       if (!rules.has(key)) throw new Error('Bad rule');
     } else if (args[0] === '-I') rules.add(key);
     else if (args[0] === '-D') rules.delete(key);
+    else if (args[0] === '-F') for (const r of [...rules]) if (r.startsWith(`${args[1]} `)) rules.delete(r);
     await new Promise((r) => setImmediate(r));
     return { stdout: '', stderr: '' };
   };
@@ -52,7 +53,7 @@ test('host mode jumps to NIDPS from INPUT, gateway mode from FORWARD', () => {
 
 test('uses sudo when not root, wsl on Windows, ip6tables for IPv6', () => {
   assert.deepEqual(buildCommands({ mode: 'host', platform: 'linux', isRoot: false }).block('1.2.3.4'), [
-    'sudo', '-n', 'iptables', '-I', 'NIDPS', '1', '-s', '1.2.3.4', '-j', 'DROP',
+    'sudo', '-n', '/usr/local/sbin/nidps-iptables', 'iptables', '-I', 'NIDPS', '1', '-s', '1.2.3.4', '-j', 'DROP',
   ]);
   assert.deepEqual(buildCommands({ mode: 'host', platform: 'win32', wslDistro: 'Ubuntu-24.04' }).block('1.2.3.4').slice(0, 6), [
     'wsl', '-d', 'Ubuntu-24.04', '-u', 'root', 'iptables',
@@ -139,6 +140,26 @@ test('init creates the chain and re-applies active blocks after a reboot', async
   assert.ok(rules.has('NIDPS -s 2.2.2.2 -j DROP'));
   await firewall.init();
   assert.equal(rules.size, 3, 'init is idempotent');
+});
+
+test('init flushes stale NIDPS rules that have no active record (review #2)', async () => {
+  const { firewall, rules } = setup();
+  rules.add('NIDPS -s 9.9.9.9 -j DROP'); // left over from a previous run with the in-memory store
+  await firewall.init();
+  assert.ok(!rules.has('NIDPS -s 9.9.9.9 -j DROP'), 'orphan rule removed');
+});
+
+test('blocking an IP whose record exists but whose rule vanished re-applies the rule (review #2)', async () => {
+  const { firewall, rules } = setup();
+  await firewall.block('198.51.100.7', 'x', 'admin');
+  rules.delete('NIDPS -s 198.51.100.7 -j DROP'); // e.g. `iptables -F NIDPS` or a reboot
+  assert.equal((await firewall.block('198.51.100.7', 'again', 'system')).status, 'already');
+  assert.ok(rules.has('NIDPS -s 198.51.100.7 -j DROP'), 'rule restored');
+});
+
+test('linux non-root calls go through the restricted sudo wrapper (review #5)', () => {
+  const cmds = buildCommands({ mode: 'host', platform: 'linux', isRoot: false });
+  assert.deepEqual(cmds.block('1.2.3.4').slice(0, 4), ['sudo', '-n', '/usr/local/sbin/nidps-iptables', 'iptables']);
 });
 
 test('simulated mode never runs commands but still records the block', async () => {

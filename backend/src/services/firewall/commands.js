@@ -9,6 +9,9 @@
 const net = require('net');
 
 const CHAIN = 'NIDPS';
+// Root-owned helper that only accepts NIDPS's own rule shapes (see scripts/nidps-iptables).
+// Granting sudo on plain iptables would be root-equivalent (iptables --modprobe=<program>).
+const SUDO_WRAPPER = '/usr/local/sbin/nidps-iptables';
 
 function buildCommands({ mode = 'host', platform = process.platform, wslDistro = 'Ubuntu-24.04', isRoot = false }) {
   const parent = mode === 'gateway' ? 'FORWARD' : 'INPUT';
@@ -16,7 +19,7 @@ function buildCommands({ mode = 'host', platform = process.platform, wslDistro =
 
   function prefix(family) {
     if (platform === 'win32') return ['wsl', '-d', wslDistro, '-u', 'root', tool(family)];
-    return isRoot ? [tool(family)] : ['sudo', '-n', tool(family)];
+    return isRoot ? [tool(family)] : ['sudo', '-n', SUDO_WRAPPER, tool(family)];
   }
   const familyOf = (ip) => (net.isIPv6(ip) ? 'ipv6' : 'ipv4');
   const rule = (ip) => ['-s', ip, '-j', 'DROP'];

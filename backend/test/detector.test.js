@@ -53,6 +53,15 @@ test('Priority 2 alerts escalate to a block on the 5th within the window', async
   assert.ok(data.every((a) => a.status === 'blocked'), 'earlier P2 alerts are marked blocked too');
 });
 
+test('escalation counts arrival time, not Snort clock (review #6)', async () => {
+  // Snort's clock is 5 hours behind NIDPS (e.g. WSL on UTC, Windows on UTC+5).
+  const { detector, store } = setup();
+  const stale = (src) => `${new Date(NOW.getTime() - 5 * 3600000).toLocaleString('en-US', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(/(\d+)\/(\d+), (\d+:\d+:\d+)/, '$1/$2-$3')} ${line(2, src)}`;
+  for (let i = 0; i < 4; i++) await detector.handleLine(stale('198.51.100.9'));
+  assert.equal((await detector.handleLine(stale('198.51.100.9'))).action, 'escalated');
+  assert.ok(await store.getActiveBlock('198.51.100.9'));
+});
+
 test('ESCALATE_COUNT=0 disables escalation', async () => {
   const { detector } = setup({ env: { ESCALATE_COUNT: '0' } });
   for (let i = 0; i < 6; i++) assert.equal((await detector.handleLine(line(2))).action, 'logged');

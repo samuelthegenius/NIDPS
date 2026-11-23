@@ -55,11 +55,6 @@ function createMemoryStore() {
       return n;
     },
 
-    async countAlertsSince(ip, severity, since) {
-      const from = toDate(since).getTime();
-      return db.alerts.filter((a) => a.source_ip === ip && a.severity === severity && time(a) >= from).length;
-    },
-
     async insertBlock({ ip_address, block_reason, expires_at, created_by }) {
       const row = {
         id: db.ids.block++,

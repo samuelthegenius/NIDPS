@@ -65,13 +65,20 @@ NIDPS_ALLOWLIST=<gateway IP>,<DNS server IP>,<admin PC IP>
 DEMO_MODE=true          # keep the simulator for the presentation
 ```
 
-**Let NIDPS run iptables without being root.** Run `sudo visudo -f /etc/sudoers.d/nidps` and add this line, replacing `student` with your user:
+**Let NIDPS run iptables without being root.** `setup_snort.sh` (below) does this for you. It
+installs a small root-owned wrapper, `/usr/local/sbin/nidps-iptables`, and writes this sudo rule
+to `/etc/sudoers.d/nidps`:
 
 ```
-student ALL=(root) NOPASSWD: /usr/sbin/iptables, /usr/sbin/ip6tables
+student ALL=(root) NOPASSWD: /usr/local/sbin/nidps-iptables
 ```
 
-NIDPS calls `sudo -n iptables …` and never runs a shell, so this is the only privilege it needs.
+The wrapper accepts **only** NIDPS's own rule shapes on the `NIDPS` chain (create, flush,
+jump, and DROP for one validated address). Never grant `NOPASSWD` on plain `iptables`:
+`iptables --modprobe=<program>` would let that user run any program as root.
+To check the wrapper's rules: `bash backend/test/nidps-iptables.cases.sh`.
+
+If you run NIDPS itself as root (for example in a lab VM), no sudo rule is needed.
 
 **Optional HTTPS** (recommended if anyone else is on the network):
 
@@ -119,28 +126,31 @@ New-NetFirewallRule -DisplayName "NIDPS dashboard" -Direction Inbound -Protocol 
 
 ## Gateway mode (protect a network behind NIDPS)
 
+The attacker must be **outside** the protected network, so that its traffic has to pass
+through the gateway. Two PCs on the same inside switch talk to each other directly and
+the gateway never sees that traffic.
+
 ```
- Campus LAN / Internet
+   Attacker PC (campus side)  e.g. 192.168.1.20
+        │      route: 192.168.50.0/24 via <gateway WAN IP>
+ Campus LAN / your own switch or hotspot
         │
-   wan_if (e.g. wlan0 or eth0, DHCP from campus)
+   wan_if (e.g. wlan0 or eth0)  e.g. 192.168.1.10
  ┌──────┴──────────────────────────┐
  │  NIDPS gateway (Linux)          │   Snort listens on lan_if
  │  NAT + FORWARD → NIDPS chain    │   NIDPS blocks in FORWARD
  └──────┬──────────────────────────┘
    lan_if (e.g. eth1, USB-Ethernet) 192.168.50.1/24
         │
-   small switch ─────────────┬───────────────────┐
-                             │                   │
-                     Victim PC              Attacker PC
-                     192.168.50.10          192.168.50.20
-                     (gw 192.168.50.1)      (or on the campus side)
+   Victim PC 192.168.50.10  (gateway 192.168.50.1; runs sshd / a web server)
 ```
 
 | Device | Address | Gateway | DNS |
 |---|---|---|---|
+| NIDPS `wan_if` | from the outside network (e.g. 192.168.1.10) | outside router | — |
 | NIDPS `lan_if` | 192.168.50.1/24 | — | — |
 | Victim PC | 192.168.50.10/24 | 192.168.50.1 | 1.1.1.1 (or campus DNS) |
-| Attacker PC (inside) | 192.168.50.20/24 | 192.168.50.1 | 1.1.1.1 |
+| Attacker PC | on the outside network (e.g. 192.168.1.20) | outside router | — |
 
 Steps:
 
@@ -166,10 +176,20 @@ Steps:
    cd backend && npm start
    ```
 6. Set the victim's static IP as in the table, then check it can reach the internet through the gateway.
-7. Attack the victim from the attacker PC (`nmap -sS 192.168.50.10`, repeated `ssh` attempts, or `curl "http://192.168.50.10/?q=union%20select"` against a web server on the victim).
-8. Verify with `sudo iptables -L FORWARD -n --line-numbers`: rule 1 must be `NIDPS`. Then run `sudo iptables -L NIDPS -n -v` to see the attacker's DROP rule and its counters.
+7. Tell the attacker PC how to reach the protected network. Use the gateway's WAN address from `ip -br addr`:
+   - Linux attacker: `sudo ip route add 192.168.50.0/24 via 192.168.1.10`
+   - Windows attacker (administrator PowerShell):
 
-A note on traffic between two inside machines: two machines plugged into the same switch talk to each other directly, without passing through the gateway. To show prevention between them, put the attacker on the **campus side** (WAN) and attack the victim through the gateway, or give each machine its own NIDPS port.
+     ```powershell
+     route add 192.168.50.0 mask 255.255.255.0 192.168.1.10
+     ```
+
+   Check it with `ping 192.168.50.10` from the attacker. Pings are logged as Priority 3 and are not blocked.
+8. Attack the victim from the attacker PC: `nmap -sS 192.168.50.10`, repeated `ssh x@192.168.50.10`, or `curl "http://192.168.50.10/?q=union%20select"` against a web server on the victim.
+9. Verify with `sudo iptables -L FORWARD -n --line-numbers`: rule 1 must be `NIDPS`. Then run `sudo iptables -L NIDPS -n -v` to see the attacker's DROP rule and its counters. The victim's own internet access keeps working throughout.
+
+Many campus networks drop traffic for routes they don't know about. If step 7 fails, connect the
+attacker and the gateway's WAN port to your own small switch or phone hotspot.
 
 ---
 
@@ -180,7 +200,7 @@ A note on traffic between two inside machines: two machines plugged into the sam
 | Dashboard not reachable from another PC | `HOST=127.0.0.1`, OS firewall, or Wi-Fi client isolation | Set `HOST=0.0.0.0`, open port 5000, use a switch or hotspot |
 | No alerts appear | Snort not running, wrong interface, or NIDPS cannot read the log | `sudo tail -f /var/log/snort/snort.alert.fast`; check `SNORT_LOG_PATH`; log out and in after being added to group `nidps` |
 | Alerts appear but no block | IP is protected (allowlist / own address), firewall simulated, or sudo not configured | Settings tab shows the allowlist and firewall mode; check the server log for `Block command failed` |
-| `sudo: a password is required` in the log | sudoers rule missing | Add the `/etc/sudoers.d/nidps` line above |
+| `sudo: a password is required` in the log | sudo rule or wrapper missing | Re-run `setup_snort.sh … $USER`, or add the `/etc/sudoers.d/nidps` line above |
 | Gateway: victim has no internet | Forwarding/NAT not set, wrong interface names | Re-run `setup_gateway.sh` with the right names; `sysctl net.ipv4.ip_forward` must be 1 |
 | Blocks vanish after reboot | Expected for iptables | NIDPS re-applies active blocks on start-up; re-run `setup_gateway.sh` for NAT |
 | Locked yourself out | Your own IP was not on the allowlist | From the console: `sudo iptables -F NIDPS`, then add your IP to `NIDPS_ALLOWLIST` |

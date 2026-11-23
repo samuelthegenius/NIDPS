@@ -74,7 +74,12 @@ function createFirewall({
       }
 
       const existing = await store.getActiveBlock(address);
-      if (existing) return { status: 'already', block: existing };
+      if (existing) {
+        // Self-heal: the record says "blocked" but the rule may have been flushed
+        // (reset, reboot, manual iptables -F). applyRule checks with -C first.
+        if (!simulated) await applyRule(address).catch((err) => console.error(`[FIREWALL] Could not re-apply ${address}: ${describe(err)}`));
+        return { status: 'already', block: existing };
+      }
 
       if (simulated) {
         console.log(`[FIREWALL SIMULATED] ${commands.block(address).join(' ')}`);
@@ -137,7 +142,11 @@ function createFirewall({
     return count;
   }
 
-  /** Creates the chain + jump (idempotent) and re-applies every active block. */
+  /**
+   * Creates the chain + jump (idempotent), empties the NIDPS chain (only NIDPS's own
+   * rules - nothing else is touched), then re-applies exactly the active blocks, so the
+   * kernel and the database always agree after a start-up.
+   */
   async function init() {
     if (simulated) {
       console.log(`[FIREWALL] Simulated mode (${settings.mode}): rules are logged, not applied.`);
@@ -147,6 +156,7 @@ function createFirewall({
       const steps = commands.setup(family);
       try {
         await run(steps.create).catch(() => {}); // already exists
+        await run(commands.flush(family));
         try {
           await run(steps.checkJump);
         } catch {

@@ -45,7 +45,14 @@ module.exports = function simulatorRoutes({ watcher }) {
       if (line.length > 1000 || !parseSnortAlert(line)) {
         return res.status(400).json({ error: 'Not a valid Snort fast-alert line' });
       }
-      fs.appendFileSync(watcher.status().path, `${line}\n`, 'utf8');
+      try {
+        fs.appendFileSync(watcher.status().path, `${line}\n`, 'utf8');
+      } catch (err) {
+        console.error(`[SIMULATOR] Cannot write ${watcher.status().path}: ${err.message}`);
+        return res.status(503).json({
+          error: 'NIDPS cannot write to the Snort alert log. Check that the backend user is in group "nidps" and the log is group-writable (see docs/LAN_DEPLOYMENT.md).',
+        });
+      }
       return res.json({ success: true, injectedLine: line });
     } catch (err) {
       return next(err);

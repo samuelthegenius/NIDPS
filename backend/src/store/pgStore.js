@@ -65,11 +65,6 @@ async function createPgStore(dbConfig) {
       return (await q(`UPDATE alerts SET status = 'blocked' WHERE source_ip = $1 AND status = 'unresolved'`, [ip])).rowCount;
     },
 
-    async countAlertsSince(ip, severity, since) {
-      const row = await one('SELECT COUNT(*) AS n FROM alerts WHERE source_ip = $1 AND severity = $2 AND timestamp >= $3', [ip, severity, since]);
-      return int(row.n);
-    },
-
     insertBlock: ({ ip_address, block_reason, expires_at, created_by }) =>
       one(
         `INSERT INTO blocked_ips (ip_address, block_reason, expires_at, created_by, is_active)

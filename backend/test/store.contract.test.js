@@ -71,17 +71,6 @@ for (const [name, make] of factories) {
     await s.close();
   });
 
-  test(`${name}: countAlertsSince respects ip, severity and time`, async () => {
-    const s = await make();
-    await s.insertAlert(alert({ timestamp: minutesAgo(1).toISOString() }));
-    await s.insertAlert(alert({ timestamp: minutesAgo(2).toISOString() }));
-    await s.insertAlert(alert({ timestamp: minutesAgo(30).toISOString() }));
-    await s.insertAlert(alert({ timestamp: minutesAgo(1).toISOString(), severity: 1 }));
-    await s.insertAlert(alert({ timestamp: minutesAgo(1).toISOString(), source_ip: '198.51.100.2' }));
-    assert.equal(await s.countAlertsSince('198.51.100.1', 2, minutesAgo(5)), 2);
-    await s.close();
-  });
-
   test(`${name}: block lifecycle`, async () => {
     const s = await make();
     const b = await s.insertBlock({ ip_address: '198.51.100.1', block_reason: 'test', expires_at: null, created_by: 'admin' });

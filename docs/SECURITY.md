@@ -7,7 +7,7 @@
 | A student on the same LAN | Open the dashboard and unblock themselves or block others | Admin login (scrypt hash, signed HttpOnly cookie, 8 h expiry), 5 failed logins → 15-minute lockout |
 | A malicious web page the admin visits | Make the admin's browser call `/api/block` (CSRF) | `SameSite=Strict` cookie, JSON-only state changes, and an `Origin` header that must match `Host` |
 | An attacker sending spoofed packets | Get NIDPS to block the gateway/DNS/admin (self-DoS) | Allowlist + own interface addresses + loopback are never blocked; blocks expire |
-| Anyone who can write to the Snort log | Forge alerts | Log directory `750 root:nidps`, file `640`; simulator only exists in demo mode, needs login, and accepts only valid Snort lines |
+| Anyone who can write to the Snort log | Forge alerts | Log directory `750 root:nidps`, file `660` (only group `nidps`); simulator only exists in demo mode, needs login, and accepts only valid Snort lines |
 | Command injection via an "IP address" | Run commands as root | `net.isIP` validation + `execFile` with argument arrays (no shell, ever) |
 | Someone on the network | Read the database | PostgreSQL bound to `127.0.0.1`; password comes from `.env` |
 | Eavesdropper on campus Wi-Fi | Steal the session or password | Optional HTTPS (`scripts/gen-cert.sh`, `TLS_CERT`/`TLS_KEY`); `Secure` cookie flag when HTTPS is on |
@@ -23,7 +23,7 @@
 | 5 | PostgreSQL on `0.0.0.0:5432` with `postgres/postgres` | Bound to `127.0.0.1`; password must be set in `.env` |
 | 6 | `cors()` allowed any origin; errors returned internal messages | CORS removed (same-origin); clients get generic errors, details stay in the log |
 | 7 | No security headers | CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, COOP |
-| 8 | `chmod 777 /var/log/snort` (anyone could forge alerts) | `750` / `640`, group `nidps` |
+| 8 | `chmod 777 /var/log/snort` (anyone could forge alerts) | Directory `750`, alert file `660`, group `nidps` only |
 | 9 | Login over plain HTTP | Optional HTTPS with a generated certificate |
 | 10 | Watcher status always reported "inactive" | Watcher exposes `status()`; the Settings tab shows it |
 | 11 | Snort local timestamps parsed as UTC; wrong year across New Year | Parsed as local time; the year rolls back when needed |

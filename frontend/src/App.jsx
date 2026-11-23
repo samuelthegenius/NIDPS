@@ -105,15 +105,20 @@ export default function App() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // Live updates: refresh shortly after any server event (bursts coalesce into one refresh).
+  // Live updates: refresh shortly after a server event. Throttled, not debounced: during a
+  // sustained attack (many events per second) the dashboard still refreshes every 250 ms
+  // instead of waiting for the attack to stop.
   useEffect(() => {
     if (!authed) return undefined;
     let pending = null;
     const close = api.subscribeEvents(
       (type, payload) => {
         if (type === 'block' && payload?.created_by === 'system') showToast(`Auto-blocked ${payload.ip_address}`, 'error');
-        clearTimeout(pending);
-        pending = setTimeout(() => refreshRef.current(), 250);
+        if (pending) return;
+        pending = setTimeout(() => {
+          pending = null;
+          refreshRef.current();
+        }, 250);
       },
       setLive
     );

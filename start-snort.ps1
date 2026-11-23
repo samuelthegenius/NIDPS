@@ -9,4 +9,4 @@ param(
 Write-Host "NIDPS Snort sensor in WSL ($Distro) | interface: $Interface" -ForegroundColor Cyan
 Write-Host "Alerts: /var/log/snort/snort.alert.fast | Ctrl+C to stop" -ForegroundColor Cyan
 
-wsl -d $Distro -u root -- bash -c "mkdir -p /var/log/snort && exec snort -A fast -q -c /etc/snort/snort.conf -i '$Interface' -l /var/log/snort"
+wsl -d $Distro -u root -- bash -c "mkdir -p /var/log/snort && exec snort -q -c /etc/snort/snort.conf -i '$Interface' -l /var/log/snort"

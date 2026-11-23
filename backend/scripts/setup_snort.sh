@@ -9,8 +9,10 @@
 # - writes the NIDPS demo rules to /etc/snort/rules/local.rules
 # - sets HOME_NET to the network you protect (instead of "any")
 # - enables fast-alert output
-# - makes /var/log/snort readable by group "nidps" only (not world-writable),
-#   and adds the backend user to that group
+# - makes /var/log/snort accessible to group "nidps" only (not world-writable),
+#   and adds the backend user to that group (the alert file is group-writable so
+#   the dashboard's demo simulator can append to it)
+# - installs the restricted iptables wrapper NIDPS uses through sudo
 # =============================================================================
 set -euo pipefail
 
@@ -29,16 +31,24 @@ if ! command -v snort >/dev/null; then
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq snort
 fi
 
-echo "[*] Log directory: $LOG_DIR (root:nidps, 750)"
+echo "[*] Log directory: $LOG_DIR (root:nidps, 750; alert file 660)"
 getent group nidps >/dev/null || groupadd --system nidps
 mkdir -p "$LOG_DIR"
 touch "$LOG_DIR/snort.alert.fast"
 chown -R root:nidps "$LOG_DIR"
 chmod 750 "$LOG_DIR"
-chmod 640 "$LOG_DIR/snort.alert.fast"
+chmod 660 "$LOG_DIR/snort.alert.fast"
 if [[ -n "$BACKEND_USER" ]]; then
   usermod -aG nidps "$BACKEND_USER"
   echo "    added $BACKEND_USER to group nidps (log out and in again for it to apply)"
+fi
+
+echo "[*] Installing restricted iptables wrapper: /usr/local/sbin/nidps-iptables"
+install -o root -g root -m 0755 "$(dirname "$0")/nidps-iptables" /usr/local/sbin/nidps-iptables
+if [[ -n "$BACKEND_USER" ]]; then
+  echo "$BACKEND_USER ALL=(root) NOPASSWD: /usr/local/sbin/nidps-iptables" > /etc/sudoers.d/nidps
+  chmod 0440 /etc/sudoers.d/nidps
+  visudo -cf /etc/sudoers.d/nidps >/dev/null && echo "    sudo rule written: /etc/sudoers.d/nidps"
 fi
 
 echo "[*] Writing NIDPS demo rules to /etc/snort/rules/local.rules"

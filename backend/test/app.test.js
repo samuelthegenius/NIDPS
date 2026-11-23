@@ -170,6 +170,19 @@ test('simulator only exists in demo mode and only accepts valid Snort lines', as
   await on.close();
 });
 
+test('simulator explains when it cannot write the alert log (review #14)', async () => {
+  const on = await startApp();
+  await on.login();
+  try {
+    fs.mkdirSync(on.logPath); // a directory where the file should be -> write fails
+    const r = await on.call('POST', '/api/simulator/inject', { body: { presetKey: 'log4j' } });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /cannot write to the Snort alert log/i);
+  } finally {
+    await on.close();
+  }
+});
+
 test('settings never expose secrets', async () => {
   const app = await startApp();
   await app.login();

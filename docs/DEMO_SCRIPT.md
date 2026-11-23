@@ -37,7 +37,7 @@ Plan to run B, and keep A ready in a second browser tab in case the network misb
 | 6:45 | Settings tab: mode, allowlist, retention | "Configuration at a glance, including the 30-day data retention: IP addresses are personal data." |
 | 7:15 | Firewall tab: *Unblock* (or wait for the expiry) | "Blocks expire, because campus IPs are reassigned by DHCP, and the next user should not be punished." |
 | 8:00 | Explain host vs gateway mode with the diagram in LAN_DEPLOYMENT.md | "Host mode protects this server; gateway mode protects a whole network routed through it, using the FORWARD chain." |
-| 9:00 | `npm test` in a terminal | "80 automated tests cover the parser, firewall engine, detector, authentication and the HTTP API." |
+| 9:00 | `npm test` in a terminal | "84 automated tests cover the parser, firewall engine, detector, authentication and the HTTP API." |
 
 ---
 
