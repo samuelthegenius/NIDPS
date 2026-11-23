@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# NIPS Snort IDS Setup Script for Ubuntu 24.04 (WSL2 / Linux)
+# NIDPS Snort IDS Setup Script for Ubuntu 24.04 (WSL2 / Linux)
 # ==============================================================================
 set -e
 
@@ -13,19 +13,19 @@ chmod 666 /var/log/snort/snort.alert.fast
 echo "[*] Configuring /etc/snort/rules/local.rules..."
 cat << 'EOF' > /etc/snort/rules/local.rules
 # ----------------------------------------------------
-# NIPS Custom Attack Signatures (Priority 1 for Auto-Mitigation)
+# NIDPS Custom Attack Signatures (Priority 1 for Auto-Mitigation)
 # ----------------------------------------------------
 # 1. ICMP Ping Detection (Echo Request Type 8 Code 0)
-alert icmp any any -> $HOME_NET any (msg:"NIPS TEST - ICMP Ping Probe Detected"; itype:8; icode:0; classtype:attempted-recon; priority:1; sid:1000001; rev:1;)
+alert icmp any any -> $HOME_NET any (msg:"NIDPS TEST - ICMP Ping Probe Detected"; itype:8; icode:0; classtype:attempted-recon; priority:1; sid:1000001; rev:1;)
 
 # 2. Inbound SSH TCP Connection Attempt (Port 22 SYN flag)
-alert tcp any any -> $HOME_NET 22 (msg:"NIPS TEST - Inbound SSH Connection Attempt"; flags:S; classtype:attempted-admin; priority:1; sid:1000002; rev:1;)
+alert tcp any any -> $HOME_NET 22 (msg:"NIDPS TEST - Inbound SSH Connection Attempt"; flags:S; classtype:attempted-admin; priority:1; sid:1000002; rev:1;)
 
 # 3. HTTP GET Infiltration / Web Recon
-alert tcp any any -> $HOME_NET 80 (msg:"NIPS TEST - Web Infiltration Attack Probe"; content:"GET"; classtype:web-application-attack; priority:1; sid:1000003; rev:1;)
+alert tcp any any -> $HOME_NET 80 (msg:"NIDPS TEST - Web Infiltration Attack Probe"; content:"GET"; classtype:web-application-attack; priority:1; sid:1000003; rev:1;)
 
 # 4. Port 8080 Alternate Web Service Probe
-alert tcp any any -> $HOME_NET 8080 (msg:"NIPS TEST - Alternate Web Service Probe"; flags:S; classtype:attempted-recon; priority:1; sid:1000004; rev:1;)
+alert tcp any any -> $HOME_NET 8080 (msg:"NIDPS TEST - Alternate Web Service Probe"; flags:S; classtype:attempted-recon; priority:1; sid:1000004; rev:1;)
 EOF
 
 echo "[*] Configuring /etc/snort/snort.conf..."

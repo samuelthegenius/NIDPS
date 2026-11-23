@@ -1,5 +1,5 @@
 /**
- * NIPS Snort Fast-Alert Log Watcher Service
+ * NIDPS Snort Fast-Alert Log Watcher Service
  * Continuously monitors Snort fast-alert log file using the 'tail' package,
  * parses intrusion alerts, records them to PostgreSQL, and triggers automated
  * firewall mitigation on Priority 1 (High Severity) threats.

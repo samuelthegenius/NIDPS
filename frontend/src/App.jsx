@@ -332,7 +332,7 @@ export default function App() {
               {/* Policy Architecture Card */}
               <div className="p-5 rounded-xl bg-[#111726] border border-slate-800 text-xs font-mono space-y-3">
                 <h4 className="text-sm font-bold text-white uppercase tracking-wider text-sky-400">
-                  NIPS Operational Policy Summary
+                  NIDPS Operational Policy Summary
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-slate-300">
                   <div className="p-3 rounded-lg bg-[#0a0e17] border border-slate-800">

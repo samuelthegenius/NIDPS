@@ -101,5 +101,5 @@ if (continuous) {
   for (let i = 0; i < 3; i++) {
     appendAlert();
   }
-  console.log('[SIMULATOR] Done! Watch the NIPS backend or dashboard for updates.');
+  console.log('[SIMULATOR] Done! Watch the NIDPS backend or dashboard for updates.');
 }

@@ -1,5 +1,5 @@
 /**
- * NIPS Firewall Prevention Engine
+ * NIDPS Firewall Prevention Engine
  * Executes kernel-level iptables blocking/unblocking and synchronizes with PostgreSQL.
  */
 
@@ -71,7 +71,7 @@ async function isIpActivelyBlocked(ipAddress) {
  * @param {string} reason - Justification or alert signature
  * @returns {Promise<Object>} Execution result and persisted record
  */
-async function blockIp(ipAddress, reason = 'Automated NIPS High Severity Rule Trigger') {
+async function blockIp(ipAddress, reason = 'Automated NIDPS High Severity Rule Trigger') {
   if (!ipAddress) {
     throw new Error('IP address is required for firewall block.');
   }

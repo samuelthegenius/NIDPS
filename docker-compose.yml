@@ -1,17 +1,17 @@
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: nips_postgres
+    container_name: nidps_postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: nips_db
+      POSTGRES_DB: nidps_db
     ports:
       - "5432:5432"
     volumes:
-      - nips_pgdata:/var/lib/postgresql/data
+      - nidps_pgdata:/var/lib/postgresql/data
       - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
 volumes:
-  nips_pgdata:
+  nidps_pgdata:

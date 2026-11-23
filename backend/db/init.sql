@@ -1,4 +1,4 @@
--- NIPS Database Schema Initialization
+-- NIDPS Database Schema Initialization
 -- PostgreSQL 12+
 
 -- Ensure clean setup (uncomment DROP statements if resetting schema)

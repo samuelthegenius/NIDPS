@@ -32,7 +32,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
     timestamp: new Date().toISOString(),
-    system: 'Network Intrusion Prevention System (NIPS)',
+    system: 'Network Intrusion Detection and Prevention System (NIDPS)',
     version: '1.0.0'
   });
 });
@@ -40,7 +40,7 @@ app.get('/api/health', (req, res) => {
 // Root informational endpoint
 app.get('/', (req, res) => {
   res.json({
-    name: 'NIPS Control Server API',
+    name: 'NIDPS Control Server API',
     endpoints: {
       alerts: '/api/alerts',
       blocked: '/api/blocked',
@@ -66,7 +66,7 @@ app.use((err, req, res, next) => {
 // Initialize server and background services
 async function startServer() {
   console.log('----------------------------------------------------');
-  console.log('   Starting NIPS Control Server & Prevention Engine  ');
+  console.log('   Starting NIDPS Control Server & Prevention Engine  ');
   console.log('----------------------------------------------------');
 
   // Test PostgreSQL connection
@@ -77,16 +77,16 @@ async function startServer() {
   logWatcher.startWatching(logFile);
 
   const server = app.listen(PORT, () => {
-    console.log(`[NIPS SERVER] Server running on http://localhost:${PORT}`);
-    console.log(`[NIPS SERVER] Snort Log Watcher active on: ${logFile}`);
+    console.log(`[NIDPS SERVER] Server running on http://localhost:${PORT}`);
+    console.log(`[NIDPS SERVER] Snort Log Watcher active on: ${logFile}`);
   });
 
   // Graceful shutdown
   const handleShutdown = () => {
-    console.log('\n[NIPS SERVER] Shutting down gracefully...');
+    console.log('\n[NIDPS SERVER] Shutting down gracefully...');
     logWatcher.stopWatching();
     server.close(() => {
-      console.log('[NIPS SERVER] HTTP server closed.');
+      console.log('[NIDPS SERVER] HTTP server closed.');
       process.exit(0);
     });
   };

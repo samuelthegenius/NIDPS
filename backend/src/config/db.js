@@ -11,7 +11,7 @@ const poolConfig = process.env.DATABASE_URL
       port: parseInt(process.env.DB_PORT || '5432', 10),
       user: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD || 'postgres',
-      database: process.env.DB_NAME || 'nips_db',
+      database: process.env.DB_NAME || 'nidps_db',
     };
 
 const pool = new Pool(poolConfig);

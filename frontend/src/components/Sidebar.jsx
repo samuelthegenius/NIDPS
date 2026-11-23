@@ -30,7 +30,7 @@ export default function Sidebar({ currentTab, setCurrentTab, systemStatus, onOpe
             </div>
             <div>
               <div className="flex items-center space-x-1.5">
-                <span className="font-bold text-white tracking-wider text-base">NIPS</span>
+                <span className="font-bold text-white tracking-wider text-base">NIDPS</span>
                 <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30">
                   SHIELD
                 </span>

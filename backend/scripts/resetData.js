@@ -1,5 +1,5 @@
 /**
- * NIPS Reset Utility
+ * NIDPS Reset Utility
  * Cleans the database, resets Snort logs, and flushes active firewall rules.
  */
 
@@ -10,7 +10,7 @@ const { pool, testConnection, inMemoryStore, getIsConnected } = require('../src/
 
 async function resetAll() {
   console.log('==================================================');
-  console.log('   Resetting NIPS Engine to Pure Zero State       ');
+  console.log('   Resetting NIDPS Engine to Pure Zero State       ');
   console.log('==================================================');
 
   // 1. Reset Database
@@ -49,7 +49,7 @@ async function resetAll() {
   }
 
   console.log('==================================================');
-  console.log(' SUCCESS: NIPS is completely clean (0 alerts, 0 blocks).');
+  console.log(' SUCCESS: NIDPS is completely clean (0 alerts, 0 blocks).');
   console.log('==================================================');
   process.exit(0);
 }

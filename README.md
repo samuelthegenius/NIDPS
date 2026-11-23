@@ -1,6 +1,6 @@
-# NIPS Management Dashboard & Prevention Engine
+# NIDPS Management Dashboard & Prevention Engine
 
-A modern, high-performance Network Intrusion Detection & Prevention System (NIPS) control software and administrative dashboard. The system continuously ingests and parses intrusion alerts from a Snort sensor, executes automated or administrative firewall blocking commands (`iptables`), and provides a real-time reactive web dashboard.
+A modern, high-performance Network Intrusion Detection and Prevention System (NIDPS) control software and administrative dashboard. The system continuously ingests and parses intrusion alerts from a Snort sensor, executes automated or administrative firewall blocking commands (`iptables`), and provides a real-time reactive web dashboard.
 
 ---
 
@@ -53,7 +53,7 @@ A modern, high-performance Network Intrusion Detection & Prevention System (NIPS
 ## Repository Structure
 
 ```
-NIPS/
+NIDPS/
 ├── backend/
 │   ├── db/
 │   │   └── init.sql                 # PostgreSQL schema and initial seed data
@@ -115,13 +115,13 @@ docker compose up -d
 This automatically provisions PostgreSQL on port `5432` and runs `backend/db/init.sql` to initialize the `alerts` and `blocked_ips` tables.
 
 ### Option B: Using Existing PostgreSQL Server
-1. Create a database named `nips_db`.
+1. Create a database named `nidps_db`.
 2. Run the initialization script:
 ```bash
 cd backend
 npm run db:init
 ```
-*(Or execute `backend/db/init.sql` using `psql -U postgres -d nips_db -f backend/db/init.sql`)*.
+*(Or execute `backend/db/init.sql` using `psql -U postgres -d nidps_db -f backend/db/init.sql`)*.
 
 > **Note:** The backend contains a built-in development fallback store. If PostgreSQL is offline, the backend still boots and handles all routes and simulated logs seamlessly so you can preview the UI immediately.
 
@@ -146,7 +146,7 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=postgres
-DB_NAME=nips_db
+DB_NAME=nidps_db
 SNORT_LOG_PATH=./mock_snort.log
 ENABLE_REAL_IPTABLES=false
 ```
@@ -212,7 +212,7 @@ echo "[**] [1:2001219:1] ET EXPLOIT Apache Log4j RCE Attempt [**] [Classificatio
 
 ---
 
-## 5. Live NIPS Deployment & Real Attack Simulation
+## 5. Live NIDPS Deployment & Real Attack Simulation
 
 Transition from local simulation to an active, real-time intrusion prevention posture protecting a physical host or virtual machine.
 
