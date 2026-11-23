@@ -1,14 +1,16 @@
+# PostgreSQL for NIDPS. Start with:  docker compose --env-file backend/.env up -d
+# The database is bound to 127.0.0.1 only, so nobody else on the LAN can reach it.
 services:
   postgres:
     image: postgres:15-alpine
     container_name: nidps_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: nidps_db
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in backend/.env}
+      POSTGRES_DB: ${DB_NAME:-nidps_db}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - nidps_pgdata:/var/lib/postgresql/data
       - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro

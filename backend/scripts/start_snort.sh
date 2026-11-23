@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Start Snort in active Intrusion Detection mode on interface eth0
-echo "========================================================"
-echo " Starting Snort IDS Sensor (WSL2 / Linux)"
-echo " Monitoring interface: eth0"
-echo " Alert output: /var/log/snort/snort.alert.fast"
-echo " Press Ctrl+C to stop the sensor."
-echo "========================================================"
+# Start the Snort sensor in fast-alert mode (Linux / WSL2). Run as root.
+#   sudo ./start_snort.sh [interface]     (default: $SNORT_INTERFACE or eth0)
+# In gateway mode, use the LAN-side interface (the one facing the protected network).
+set -euo pipefail
+IFACE="${1:-${SNORT_INTERFACE:-eth0}}"
+LOG_DIR=/var/log/snort
 
-mkdir -p /var/log/snort
-chmod -R 777 /var/log/snort
-
-exec snort -A fast -q -c /etc/snort/snort.conf -i eth0 -l /var/log/snort
+if [[ $EUID -ne 0 ]]; then echo "Run as root (sudo)." >&2; exit 1; fi
+echo "NIDPS Snort sensor | interface: $IFACE | alerts: $LOG_DIR/snort.alert.fast | Ctrl+C to stop"
+mkdir -p "$LOG_DIR"
+exec snort -A fast -q -c /etc/snort/snort.conf -i "$IFACE" -l "$LOG_DIR"

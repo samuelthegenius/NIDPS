@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-const logFilePath = path.resolve(process.env.SNORT_LOG_PATH || path.join(__dirname, '../mock_snort.log'));
+const logFilePath = require('../src/config/settings').loadSettings().snortLogPath;
 
 const SAMPLE_ATTACKS = [
   {
@@ -18,7 +18,7 @@ const SAMPLE_ATTACKS = [
     proto: 'TCP',
     destPort: 8080,
     destIp: '10.0.0.5',
-    srcIps: ['185.220.101.5', '194.26.29.112', '91.240.118.172']
+    srcIps: ['203.0.113.5', '203.0.113.112', '203.0.113.172']
   },
   {
     msg: 'ET WEB_SERVER Possible SQL Injection Attempt UNION SELECT',
@@ -27,7 +27,7 @@ const SAMPLE_ATTACKS = [
     proto: 'TCP',
     destPort: 443,
     destIp: '10.0.0.80',
-    srcIps: ['45.146.165.37', '185.191.171.12', '103.251.167.20']
+    srcIps: ['198.51.100.37', '198.51.100.12', '198.51.100.20']
   },
   {
     msg: 'ET SCAN Potential SSH Brute Force Login Attempt',
@@ -36,7 +36,7 @@ const SAMPLE_ATTACKS = [
     proto: 'TCP',
     destPort: 22,
     destIp: '10.0.0.10',
-    srcIps: ['192.168.1.50', '212.102.40.89', '185.244.25.18']
+    srcIps: ['192.0.2.50', '192.0.2.89', '192.0.2.18']
   },
   {
     msg: 'ET DOS DNS Amplification Reflection Attack Detected',
@@ -63,7 +63,7 @@ const SAMPLE_ATTACKS = [
     proto: 'ICMP',
     destPort: 0,
     destIp: '10.0.0.1',
-    srcIps: ['192.168.1.200', '198.51.100.12']
+    srcIps: ['192.0.2.200', '198.51.100.120']
   }
 ];
 

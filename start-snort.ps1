@@ -1,8 +1,12 @@
-# Launch Snort IDS inside WSL (Ubuntu-24.04) as root
-Write-Host "========================================================" -ForegroundColor Cyan
-Write-Host "   Starting Snort IDS Sensor inside WSL (Ubuntu-24.04)  " -ForegroundColor Cyan
-Write-Host "   Interface: eth0 | Log: /var/log/snort/snort.alert.fast" -ForegroundColor Cyan
-Write-Host "   Press Ctrl+C to terminate Snort sensor." -ForegroundColor Cyan
-Write-Host "========================================================" -ForegroundColor Cyan
+# Start the Snort sensor inside WSL (Windows development / demo machine).
+#   .\start-snort.ps1                       # Ubuntu-24.04, eth0
+#   .\start-snort.ps1 -Distro Ubuntu-24.04 -Interface eth0
+param(
+    [string]$Distro = "Ubuntu-24.04",
+    [string]$Interface = "eth0"
+)
 
-wsl -d Ubuntu-24.04 -u root bash -c "mkdir -p /var/log/snort && chmod -R 777 /var/log/snort && exec snort -A fast -q -c /etc/snort/snort.conf -i eth0 -l /var/log/snort"
+Write-Host "NIDPS Snort sensor in WSL ($Distro) | interface: $Interface" -ForegroundColor Cyan
+Write-Host "Alerts: /var/log/snort/snort.alert.fast | Ctrl+C to stop" -ForegroundColor Cyan
+
+wsl -d $Distro -u root -- bash -c "mkdir -p /var/log/snort && exec snort -A fast -q -c /etc/snort/snort.conf -i '$Interface' -l /var/log/snort"

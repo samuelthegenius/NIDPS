@@ -1,60 +1,61 @@
 /**
- * NIDPS Reset Utility
- * Cleans the database, resets Snort logs, and flushes active firewall rules.
+ * `npm run reset` - return NIDPS to a clean state before a demo:
+ *   - empties the PostgreSQL tables (alerts, blocked_ips, audit_log)
+ *   - empties the Snort alert log that NIDPS watches
+ *   - flushes ONLY the NIDPS iptables chain (other firewall rules are untouched)
+ * Stop NIDPS first: a running in-memory store is not affected by this script.
  */
-
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
-const { pool, testConnection, inMemoryStore, getIsConnected } = require('../src/config/db');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const { loadSettings } = require('../src/config/settings');
+const { createPgStore } = require('../src/store/pgStore');
+const { buildCommands } = require('../src/services/firewall/commands');
 
-async function resetAll() {
-  console.log('==================================================');
-  console.log('   Resetting NIDPS Engine to Pure Zero State       ');
-  console.log('==================================================');
+const run = promisify(execFile);
 
-  // 1. Reset Database
-  const isPostgresUp = await testConnection();
-  if (isPostgresUp) {
-    console.log('[RESET] Truncating PostgreSQL tables: alerts & blocked_ips...');
-    await pool.query('TRUNCATE TABLE alerts RESTART IDENTITY CASCADE;');
-    await pool.query('TRUNCATE TABLE blocked_ips RESTART IDENTITY CASCADE;');
-    console.log('[RESET] PostgreSQL tables cleared.');
-  } else {
-    console.log('[RESET] In-memory store reset to empty arrays.');
-    inMemoryStore.alerts = [];
-    inMemoryStore.blocked_ips = [];
-    inMemoryStore.nextAlertId = 1;
-    inMemoryStore.nextBlockId = 1;
-  }
+async function main() {
+  const settings = loadSettings();
+  console.log('Resetting NIDPS...');
 
-  // 2. Truncate local mock_snort.log
-  const localLogPath = path.resolve(__dirname, '../mock_snort.log');
-  if (fs.existsSync(localLogPath)) {
-    fs.writeFileSync(localLogPath, '', 'utf8');
-    console.log(`[RESET] Cleared local log file: ${localLogPath}`);
-  }
-
-  // 3. Truncate Snort alert log in WSL and flush iptables
   try {
-    console.log('[RESET] Truncating WSL Snort log (/var/log/snort/snort.alert.fast)...');
-    execSync('wsl -d Ubuntu-24.04 -u root bash -c "> /var/log/snort/snort.alert.fast"', { stdio: 'pipe' });
-    console.log('[RESET] WSL Snort log cleared.');
-
-    console.log('[RESET] Flushing active iptables rules in WSL (iptables -F INPUT)...');
-    execSync('wsl -d Ubuntu-24.04 -u root iptables -F INPUT', { stdio: 'pipe' });
-    console.log('[RESET] Firewall rules flushed.');
-  } catch (wslErr) {
-    console.warn(`[RESET NOTICE] WSL reset skipped or not running: ${wslErr.message}`);
+    const store = await createPgStore(settings.db);
+    await store.pool.query('TRUNCATE alerts, blocked_ips, audit_log RESTART IDENTITY');
+    await store.close();
+    console.log('  - PostgreSQL: alerts, blocked_ips and audit_log emptied');
+  } catch (err) {
+    console.log(`  - PostgreSQL not reachable (${err.message}); nothing to empty`);
   }
 
-  console.log('==================================================');
-  console.log(' SUCCESS: NIDPS is completely clean (0 alerts, 0 blocks).');
-  console.log('==================================================');
-  process.exit(0);
+  const logPath = settings.snortLogPath;
+  try {
+    fs.writeFileSync(logPath, '', 'utf8');
+    console.log(`  - Emptied Snort alert log: ${logPath}`);
+  } catch (err) {
+    console.log(`  - Could not empty ${logPath}: ${err.message}`);
+  }
+
+  if (settings.realFirewall) {
+    const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+    const commands = buildCommands({ mode: settings.mode, wslDistro: settings.wslDistro, isRoot });
+    for (const family of ['ipv4', 'ipv6']) {
+      const argv = commands.flush(family);
+      try {
+        await run(argv[0], argv.slice(1), { timeout: 15000, windowsHide: true });
+        console.log(`  - Flushed ${family} NIDPS chain`);
+      } catch (err) {
+        console.log(`  - ${family} NIDPS chain not flushed (${(err.stderr || err.message).trim()})`);
+      }
+    }
+  } else {
+    console.log('  - Firewall is simulated (ENABLE_REAL_IPTABLES=false); no rules to flush');
+  }
+  console.log('Done.');
 }
 
-resetAll().catch((err) => {
-  console.error('[RESET ERROR]', err);
-  process.exit(1);
+main().catch((err) => {
+  console.error('Reset failed:', err.message);
+  process.exitCode = 1;
 });

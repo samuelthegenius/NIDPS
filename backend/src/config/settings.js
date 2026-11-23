@@ -4,6 +4,8 @@
  */
 const path = require('path');
 
+const BACKEND_DIR = path.join(__dirname, '../..');
+
 function bool(value, fallback = false) {
   if (value === undefined || value === '') return fallback;
   return String(value).trim().toLowerCase() === 'true';
@@ -39,7 +41,8 @@ function loadSettings(env = process.env) {
     demoMode: bool(env.DEMO_MODE),
     realFirewall: bool(env.ENABLE_REAL_IPTABLES),
     wslDistro: env.WSL_DISTRO || 'Ubuntu-24.04',
-    snortLogPath: env.SNORT_LOG_PATH || path.join(__dirname, '../../mock_snort.log'),
+    // Relative paths are relative to backend/, whatever directory NIDPS is started from.
+    snortLogPath: path.resolve(BACKEND_DIR, env.SNORT_LOG_PATH || 'mock_snort.log'),
     snortInterface: env.SNORT_INTERFACE || 'eth0',
     allowlist: list(env.NIDPS_ALLOWLIST),
     blockDurationMin: number(env, 'BLOCK_DURATION_MIN', 60),
