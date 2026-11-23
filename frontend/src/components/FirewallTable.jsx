@@ -1,4 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
+function useNow(intervalMs = 1000) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(t);
+  }, [intervalMs]);
+  return now;
+}
+
+function remaining(expiresAt, now) {
+  if (!expiresAt) return 'Permanent';
+  const ms = new Date(expiresAt).getTime() - now;
+  if (ms <= 0) return 'Expiring…';
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}:${String(s).padStart(2, '0')}`;
+}
 import { 
   Flame, 
   ShieldCheck, 
@@ -20,11 +40,14 @@ export default function FirewallTable({
 }) {
   const [search, setSearch] = useState('');
   const [unblockingIp, setUnblockingIp] = useState(null);
+  const now = useNow();
 
   const handleUnblock = async (ip) => {
     setUnblockingIp(ip);
     try {
       await onUnblock(ip);
+    } catch {
+      // the toast already reports the error
     } finally {
       setUnblockingIp(null);
     }
@@ -111,7 +134,7 @@ export default function FirewallTable({
 
           {/* Manual Block Button */}
           <button
-            onClick={onOpenBlockModal}
+            onClick={() => onOpenBlockModal('')}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-medium transition-all shadow-md shadow-red-600/20"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -128,15 +151,16 @@ export default function FirewallTable({
               <th className="py-3 px-4">Blocked IP</th>
               <th className="py-3 px-4">Status</th>
               <th className="py-3 px-4">Reason / Rule Trigger</th>
+              <th className="py-3 px-4">By</th>
               <th className="py-3 px-4">Blocked At</th>
-              <th className="py-3 px-4">Unblocked At</th>
+              <th className="py-3 px-4">{showActiveOnly ? 'Expires In' : 'Unblocked At'}</th>
               <th className="py-3 px-4 text-right">Firewall Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60 font-mono">
             {loading ? (
               <tr>
-                <td colSpan="6" className="py-12 text-center text-slate-500">
+                <td colSpan="7" className="py-12 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center space-y-2">
                     <div className="w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
                     <span>Loading firewall state...</span>
@@ -145,7 +169,7 @@ export default function FirewallTable({
               </tr>
             ) : filteredIps.length === 0 ? (
               <tr>
-                <td colSpan="6" className="py-12 text-center text-slate-500">
+                <td colSpan="7" className="py-12 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center space-y-2">
                     <ShieldCheck className="w-8 h-8 text-emerald-500/70" />
                     <span>No IP addresses currently blocked.</span>
@@ -188,6 +212,11 @@ export default function FirewallTable({
                       {entry.block_reason}
                     </td>
 
+                    {/* Who */}
+                    <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
+                      {entry.created_by === 'system' ? 'Automatic' : entry.created_by || '—'}
+                    </td>
+
                     {/* Blocked At */}
                     <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
                       <div className="flex items-center space-x-1.5">
@@ -196,9 +225,9 @@ export default function FirewallTable({
                       </div>
                     </td>
 
-                    {/* Unblocked At */}
-                    <td className="py-3 px-4 text-slate-500 whitespace-nowrap">
-                      {formatTimestamp(entry.unblocked_at)}
+                    {/* Expiry countdown (active) or unblock time (history) */}
+                    <td className="py-3 px-4 text-slate-400 whitespace-nowrap tabular-nums">
+                      {entry.is_active ? remaining(entry.expires_at, now) : formatTimestamp(entry.unblocked_at)}
                     </td>
 
                     {/* Unblock Action Button */}

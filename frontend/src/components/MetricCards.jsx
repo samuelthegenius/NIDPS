@@ -1,7 +1,7 @@
 import React from 'react';
 import { ShieldAlert, Flame, AlertOctagon, Activity, ArrowUpRight } from 'lucide-react';
 
-export default function MetricCards({ stats, onNavigate }) {
+export default function MetricCards({ stats, settings, onNavigate }) {
   const totalAlerts = stats?.totalAlerts24h ?? 0;
   const activeBlocks = stats?.activeBlocksCount ?? 0;
   const highThreats = stats?.highSeverityThreats ?? 0;
@@ -40,8 +40,10 @@ export default function MetricCards({ stats, onNavigate }) {
     },
     {
       title: 'Prevention Engine Status',
-      value: 'ACTIVE',
-      subtitle: 'Continuous Snort monitoring',
+      value: settings?.watcher?.active === false ? 'STOPPED' : 'ACTIVE',
+      subtitle: settings
+        ? `${settings.mode === 'gateway' ? 'Gateway' : 'Host'} mode · ${settings.realFirewall ? 'live' : 'simulated'} firewall`
+        : 'Continuous Snort monitoring',
       icon: Activity,
       color: 'text-emerald-400',
       bgColor: 'bg-emerald-500/10',

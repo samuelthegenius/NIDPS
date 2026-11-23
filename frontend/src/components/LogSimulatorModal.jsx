@@ -8,6 +8,7 @@ export default function LogSimulatorModal({ isOpen, onClose, onInject }) {
   const [mode, setMode] = useState('preset'); // 'preset' or 'custom'
   const [loading, setLoading] = useState(false);
   const [lastInjected, setLastInjected] = useState(null);
+  const [error, setError] = useState('');
 
   if (!isOpen) return null;
 
@@ -16,7 +17,7 @@ export default function LogSimulatorModal({ isOpen, onClose, onInject }) {
       id: 'log4j',
       name: 'Apache Log4j RCE (CVE-2021-44228)',
       priority: 1,
-      defaultIp: '185.220.101.5',
+      defaultIp: '203.0.113.5',
       desc: 'High severity RCE attack. Triggers AUTOMATED firewall block.',
       color: 'border-red-500/50 bg-red-950/20 text-red-400'
     },
@@ -24,7 +25,7 @@ export default function LogSimulatorModal({ isOpen, onClose, onInject }) {
       id: 'sqli',
       name: 'SQL Injection UNION SELECT Attempt',
       priority: 1,
-      defaultIp: '45.146.165.37',
+      defaultIp: '198.51.100.37',
       desc: 'Web application database compromise attempt. Triggers AUTOMATED block.',
       color: 'border-red-500/50 bg-red-950/20 text-red-400'
     },
@@ -32,8 +33,8 @@ export default function LogSimulatorModal({ isOpen, onClose, onInject }) {
       id: 'ssh_brute',
       name: 'SSH Brute Force Dictionary Attack',
       priority: 2,
-      defaultIp: '192.168.1.50',
-      desc: 'Medium severity credential brute force against port 22.',
+      defaultIp: '192.0.2.50',
+      desc: 'Medium severity. Inject it 5 times to see the escalation rule block it.',
       color: 'border-amber-500/50 bg-amber-950/20 text-amber-400'
     },
     {
@@ -48,7 +49,7 @@ export default function LogSimulatorModal({ isOpen, onClose, onInject }) {
       id: 'nmap',
       name: 'Nmap Scripting Engine Recon Scan',
       priority: 3,
-      defaultIp: '192.0.2.77',
+      defaultIp: '203.0.113.112',
       desc: 'Low severity port reconnaissance scan.',
       color: 'border-sky-500/50 bg-sky-950/20 text-sky-400'
     }
@@ -57,6 +58,7 @@ export default function LogSimulatorModal({ isOpen, onClose, onInject }) {
   const handleInject = async () => {
     try {
       setLoading(true);
+      setError('');
       let payload = {};
 
       if (mode === 'preset') {
@@ -75,7 +77,7 @@ export default function LogSimulatorModal({ isOpen, onClose, onInject }) {
       const res = await onInject(payload);
       setLastInjected(res);
     } catch (err) {
-      alert(`Error injecting log: ${err.message}`);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -98,7 +100,7 @@ export default function LogSimulatorModal({ isOpen, onClose, onInject }) {
                 </span>
               </h3>
               <p className="text-xs text-slate-400 font-sans">
-                Appends formatted fast-alerts into <code className="text-sky-300 font-mono">mock_snort.log</code> to test logWatcher and firewall mitigation.
+                Writes a Snort-format alert into the watched alert log, so it follows exactly the same path as a real attack.
               </p>
             </div>
           </div>
@@ -200,18 +202,22 @@ export default function LogSimulatorModal({ isOpen, onClose, onInject }) {
             </div>
           )}
 
+          {error && (
+            <p role="alert" className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300">{error}</p>
+          )}
+
           {/* Last injected result banner */}
           {lastInjected && (
             <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-mono text-emerald-300 space-y-1">
               <div className="flex items-center gap-1.5 font-bold">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Alert Line Written to mock_snort.log</span>
+                <span>Alert line written to the Snort alert log</span>
               </div>
               <div className="text-[11px] text-slate-300 break-all bg-black/40 p-2 rounded border border-emerald-500/20">
                 {lastInjected.injectedLine}
               </div>
               <p className="text-[10px] text-slate-400">
-                The Log Watcher will parse this alert and execute automated mitigation if Priority 1.
+                Watch the dashboard: Priority 1 is blocked at once; Priority 2 escalates after repeats.
               </p>
             </div>
           )}
@@ -220,7 +226,7 @@ export default function LogSimulatorModal({ isOpen, onClose, onInject }) {
         {/* Footer */}
         <div className="p-4 border-t border-slate-800 bg-[#0e1422] flex items-center justify-between">
           <span className="text-xs text-slate-400 font-mono hidden sm:inline">
-            Target: <code className="text-sky-300">mock_snort.log</code>
+            Simulated attacks use documentation IP ranges
           </span>
           <div className="flex items-center space-x-2">
             <button

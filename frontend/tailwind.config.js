@@ -20,7 +20,9 @@ export default {
         }
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Fira Code', 'Courier New', 'monospace'],
+        // System fonts only: the dashboard must work offline on a lab LAN.
+        sans: ['system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Ubuntu', 'sans-serif'],
+        mono: ['ui-monospace', 'Cascadia Code', 'Consolas', 'Ubuntu Mono', 'Menlo', 'monospace'],
       }
     },
   },

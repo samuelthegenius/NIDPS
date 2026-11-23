@@ -19,6 +19,7 @@ export default function AlertsTable({
   searchTerm,
   setSearchTerm,
   onBlockIp,
+  onTriage,
   blockedIpsSet = new Set(),
   loading = false
 }) {
@@ -81,7 +82,7 @@ export default function AlertsTable({
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Real-time intrusion alerts parsed from <code className="text-sky-400 font-mono">mock_snort.log</code>
+            Real-time intrusion alerts parsed from the Snort fast-alert log
           </p>
         </div>
 
@@ -200,15 +201,37 @@ export default function AlertsTable({
                             ? 'bg-red-500/20 text-red-400 border border-red-500/30'
                             : alert.status === 'investigating'
                               ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                              : alert.status === 'resolved'
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                : alert.status === 'false_positive'
+                                  ? 'bg-violet-500/15 text-violet-300 border border-violet-500/30'
+                                  : 'bg-slate-800 text-slate-400 border border-slate-700'
                         }`}
                       >
-                        {alert.status}
+                        {alert.status.replace('_', ' ')}
                       </span>
                     </td>
 
-                    {/* Quick Action Button */}
-                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                    {/* Triage + Quick Action Buttons */}
+                    <td className="py-3 px-4 text-right whitespace-nowrap space-x-1.5">
+                      {onTriage && (alert.status === 'unresolved' || alert.status === 'investigating') && (
+                        <>
+                          <button
+                            onClick={() => onTriage(alert.id, 'resolved')}
+                            className="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700"
+                            title="Mark as handled"
+                          >
+                            Resolve
+                          </button>
+                          <button
+                            onClick={() => onTriage(alert.id, 'false_positive')}
+                            className="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-violet-300 border border-slate-700"
+                            title="Not a real attack"
+                          >
+                            False +
+                          </button>
+                        </>
+                      )}
                       {isBlocked ? (
                         <span className="inline-flex items-center gap-1 text-[11px] text-red-400 font-semibold px-2 py-1 rounded bg-red-500/10 border border-red-500/20">
                           <Flame className="w-3 h-3" /> BLOCKED
