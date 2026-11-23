@@ -1,98 +1,82 @@
-const express = require('express');
-const cors = require('cors');
-const morgan = require('morgan');
+/**
+ * NIDPS entry point: loads settings, builds every service, and starts the
+ * HTTP(S) server that serves both the API and the dashboard.
+ */
 const path = require('path');
-require('dotenv').config();
+const fs = require('fs');
+const http = require('http');
+const https = require('https');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-const { testConnection } = require('./config/db');
-const logWatcher = require('./services/logWatcher');
+const { loadSettings } = require('./config/settings');
+const { createStore } = require('./store');
+const { createAllowlist } = require('./lib/allowlist');
+const { createEventBus } = require('./services/events');
+const { createFirewall } = require('./services/firewall');
+const { createDetector } = require('./services/detector');
+const { createLogWatcher } = require('./services/logWatcher');
+const { createMaintenance } = require('./jobs/maintenance');
+const { createApp } = require('./app');
 
-const alertsRoutes = require('./routes/alerts');
-const firewallRoutes = require('./routes/firewall');
-const statsRoutes = require('./routes/stats');
-const simulatorRoutes = require('./routes/simulator');
+function lanAddresses() {
+  return Object.values(require('os').networkInterfaces())
+    .flat()
+    .filter((i) => i && i.family === 'IPv4' && !i.internal)
+    .map((i) => i.address);
+}
 
-const app = express();
-const PORT = process.env.PORT || 5000;
+async function main() {
+  const settings = loadSettings();
+  if (!settings.adminPasswordHash || !settings.sessionSecret) {
+    console.error('NIDPS is not set up yet: no admin password. Run:  npm run setup');
+    process.exit(1);
+  }
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(morgan('dev'));
+  console.log('------------------------------------------------------------');
+  console.log(' NIDPS - Network Intrusion Detection and Prevention System');
+  console.log(` Mode: ${settings.mode} | Firewall: ${settings.realFirewall ? 'LIVE' : 'simulated'} | Demo mode: ${settings.demoMode ? 'on' : 'off'}`);
+  console.log('------------------------------------------------------------');
 
-// API Routes
-app.use('/api/alerts', alertsRoutes);
-app.use('/api', firewallRoutes); // Provides /api/blocked, /api/block, /api/unblock
-app.use('/api/stats', statsRoutes);
-app.use('/api/simulator', simulatorRoutes);
+  const store = await createStore(settings);
+  const events = createEventBus();
+  const allowlist = createAllowlist({ entries: settings.allowlist });
+  const firewall = createFirewall({ settings, store, allowlist, events });
+  await firewall.init();
+  const detector = createDetector({ store, firewall, settings, events });
+  const watcher = createLogWatcher({ path: settings.snortLogPath, onLine: (line) => detector.handleLine(line) });
+  watcher.start();
+  const maintenance = createMaintenance({ firewall, store, settings });
+  maintenance.start();
 
-// System Health & Diagnostics
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'online',
-    timestamp: new Date().toISOString(),
-    system: 'Network Intrusion Detection and Prevention System (NIDPS)',
-    version: '1.0.0'
-  });
-});
+  const app = createApp({ settings, store, firewall, detector, events, watcher, allowlist });
+  const useTls = Boolean(settings.tlsCert && settings.tlsKey);
+  const server = useTls
+    ? https.createServer({ cert: fs.readFileSync(settings.tlsCert), key: fs.readFileSync(settings.tlsKey) }, app)
+    : http.createServer(app);
 
-// Root informational endpoint
-app.get('/', (req, res) => {
-  res.json({
-    name: 'NIDPS Control Server API',
-    endpoints: {
-      alerts: '/api/alerts',
-      blocked: '/api/blocked',
-      block: 'POST /api/block',
-      unblock: 'POST /api/unblock',
-      stats: '/api/stats',
-      simulator: '/api/simulator'
+  server.listen(settings.port, settings.host, () => {
+    const scheme = useTls ? 'https' : 'http';
+    console.log(`[NIDPS] Dashboard: ${scheme}://localhost:${settings.port}`);
+    if (settings.host === '0.0.0.0') {
+      for (const ip of lanAddresses()) console.log(`[NIDPS] On the LAN:  ${scheme}://${ip}:${settings.port}`);
     }
   });
-});
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Endpoint not found' });
-});
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('[SERVER UNHANDLED ERROR]', err);
-  res.status(500).json({ error: 'Internal Server Error', message: err.message });
-});
-
-// Initialize server and background services
-async function startServer() {
-  console.log('----------------------------------------------------');
-  console.log('   Starting NIDPS Control Server & Prevention Engine  ');
-  console.log('----------------------------------------------------');
-
-  // Test PostgreSQL connection
-  await testConnection();
-
-  // Start Snort Log Watcher
-  const logFile = process.env.SNORT_LOG_PATH || path.join(__dirname, '../mock_snort.log');
-  logWatcher.startWatching(logFile);
-
-  const server = app.listen(PORT, () => {
-    console.log(`[NIDPS SERVER] Server running on http://localhost:${PORT}`);
-    console.log(`[NIDPS SERVER] Snort Log Watcher active on: ${logFile}`);
-  });
-
-  // Graceful shutdown
-  const handleShutdown = () => {
-    console.log('\n[NIDPS SERVER] Shutting down gracefully...');
-    logWatcher.stopWatching();
-    server.close(() => {
-      console.log('[NIDPS SERVER] HTTP server closed.');
+  const shutdown = () => {
+    console.log('\n[NIDPS] Shutting down...');
+    maintenance.stop();
+    watcher.stop();
+    server.closeAllConnections();
+    server.close(async () => {
+      await store.close();
       process.exit(0);
     });
   };
-
-  process.on('SIGINT', handleShutdown);
-  process.on('SIGTERM', handleShutdown);
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
-startServer();
+main().catch((err) => {
+  console.error('[NIDPS] Failed to start:', err.message);
+  process.exit(1);
+});
