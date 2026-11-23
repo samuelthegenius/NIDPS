@@ -9,7 +9,8 @@
     "db:init": "node src/config/initDb.js",
     "simulate": "node scripts/generateMockLogs.js",
     "reset": "node scripts/resetData.js",
-    "test": "node --test \"test/*.test.js\""
+    "test": "node --test \"test/*.test.js\"",
+    "setup": "node scripts/setup-admin.js"
   },
   "keywords": [
     "nidps",
