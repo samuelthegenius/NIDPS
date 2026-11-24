@@ -33,7 +33,7 @@ export default function Navbar({ live, onRefresh, isRefreshing, onOpenSimulator,
             </Badge>
             <Badge
               className={settings.realFirewall ? 'bg-red-500/10 border-red-500/30 text-red-300' : 'bg-slate-800 border-slate-700 text-slate-300'}
-              title={settings.realFirewall ? 'iptables rules are really applied' : 'iptables commands are logged, not applied'}
+              title={settings.realFirewall ? 'Firewall rules are really applied' : 'Firewall commands are logged, not applied'}
             >
               {settings.realFirewall ? 'Live firewall' : 'Simulated firewall'}
             </Badge>

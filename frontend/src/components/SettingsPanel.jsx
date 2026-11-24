@@ -13,6 +13,8 @@ function Row({ label, value, hint }) {
   );
 }
 
+const FIREWALL_NAMES = { iptables: 'iptables (Linux)', windows: 'Windows Firewall', wsl: 'iptables in WSL' };
+
 export default function SettingsPanel({ settings }) {
   if (!settings) return <p className="text-sm text-slate-400">Loading settings…</p>;
   const minutes = (n) => (n > 0 ? `${n} min` : 'permanent');
@@ -24,7 +26,7 @@ export default function SettingsPanel({ settings }) {
           <Settings className="w-4 h-4 text-sky-400" /> Engine configuration
         </h3>
         <Row label="Deployment mode" value={settings.mode === 'gateway' ? 'Gateway (FORWARD)' : 'Host (INPUT)'} hint="Host protects this machine; gateway protects the network routed through it." />
-        <Row label="Firewall" value={settings.realFirewall ? 'LIVE iptables' : 'Simulated'} hint="Simulated mode logs the exact iptables command without running it." />
+        <Row label="Firewall" value={`${settings.realFirewall ? 'LIVE' : 'Simulated'} · ${FIREWALL_NAMES[settings.firewall] || settings.firewall || 'iptables'}`} hint="Simulated mode logs the exact firewall command without running it." />
         <Row label="Demo mode" value={settings.demoMode ? 'On (simulator enabled)' : 'Off'} />
         <Row label="Block duration" value={minutes(settings.blockDurationMin)} hint="Blocks are lifted automatically after this time." />
         <Row label="Escalation rule" value={settings.escalateCount > 0 ? `${settings.escalateCount} × P2 in ${settings.escalateWindowMin} min` : 'Disabled'} hint="Repeated medium-severity alerts from one source trigger a block." />

@@ -108,6 +108,7 @@ module.exports = function apiRoutes({ settings, store, firewall, watcher, allowl
       mode: settings.mode,
       demoMode: settings.demoMode,
       realFirewall: settings.realFirewall,
+      firewall: firewall.backend,
       platform: process.platform,
       allowlist: allowlist.describe(),
       blockDurationMin: settings.blockDurationMin,

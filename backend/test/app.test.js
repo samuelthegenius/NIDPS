@@ -189,6 +189,7 @@ test('settings never expose secrets', async () => {
   const r = await app.call('GET', '/api/settings');
   assert.equal(r.status, 200);
   assert.equal(r.json.mode, 'host');
+  assert.equal(r.json.firewall, process.platform === 'win32' ? 'windows' : 'iptables');
   assert.ok(!r.text.includes('scrypt$'));
   assert.ok(!r.text.includes(SECRET));
   await app.close();
