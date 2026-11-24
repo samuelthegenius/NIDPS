@@ -1,11 +1,14 @@
 # NIDPS — Network Intrusion Detection and Prevention System
 
 NIDPS watches network traffic with **Snort**, records every intrusion alert, and
-**automatically blocks attackers** with `iptables`. Everything is controlled from a
+**automatically blocks attackers** with the operating system's firewall: `iptables` on
+Linux, Windows Firewall on Windows. Everything is controlled from a
 password-protected web dashboard that updates live.
 
 ```
- network traffic ─► Snort ─► alert log ─► NIDPS detector ─► iptables DROP (NIDPS chain)
+ network traffic ─► Snort ─► alert log ─► NIDPS detector ─► firewall block
+                                              │                (Linux: iptables NIDPS chain,
+                                              │                 Windows: NIDPS-block-* rules)
                                               │
                                               ├─► PostgreSQL (alerts, blocks, audit log)
                                               └─► live dashboard (React, Server-Sent Events)
@@ -16,7 +19,8 @@ password-protected web dashboard that updates live.
 - **Priority 3** alerts → logged for analysis.
 - Gateway, DNS and admin machines can be **protected** so they are never blocked.
 - Blocks **expire automatically**, and every action goes into an **audit log**.
-- Runs in **host mode** (protect this machine) or **gateway mode** (protect a network behind it).
+- Runs in **host mode** (protect this machine; Linux or Windows) or **gateway mode** (protect a
+  network behind it; Linux).
 
 > New to the project? Start with **[HANDOFF.md](HANDOFF.md)**.
 
@@ -38,6 +42,18 @@ Without PostgreSQL, NIDPS runs on an in-memory store (data resets on restart). F
 persistent storage, set `DB_PASSWORD` in `backend/.env` and run
 `docker compose --env-file backend/.env up -d`.
 
+## Running it for real (live Snort + live firewall)
+
+| | Linux (host or gateway mode) | Windows 10/11 (host mode) |
+|---|---|---|
+| Install | `sudo ./backend/scripts/setup_snort.sh eth0 192.168.1.0/24 $USER` | Npcap + Snort 2.9 for Windows, then `backend\scripts\windows\setup-snort.ps1 -HomeNet 192.168.1.0/24` |
+| Start Snort | `sudo ./backend/scripts/start_snort.sh eth0` | `backend\scripts\windows\start-snort.ps1 -Interface <n>` |
+| `backend/.env` | `ENABLE_REAL_FIREWALL=true` | `ENABLE_REAL_FIREWALL=true`, `SNORT_LOG_PATH=C:\Snort\log\snort.alert.fast` |
+| Start NIDPS | `npm start` | `npm start` in PowerShell opened *as Administrator* |
+| Check | `sudo iptables -L NIDPS -n -v` | `backend\scripts\windows\check-windows.ps1` |
+
+Step-by-step guides for both are in [docs/LAN_DEPLOYMENT.md](docs/LAN_DEPLOYMENT.md).
+
 ## Documentation
 
 | Document | What it covers |
@@ -58,12 +74,12 @@ persistent storage, set `DB_PASSWORD` in `backend/.env` and run
 | backend | `npm run test:scripts` | Test the firewall wrapper and gateway pre-flight scripts (needs bash) |
 | backend | `npm run setup` | Set or change the admin password |
 | backend | `npm run simulate` | Append 3 sample alerts to the Snort log |
-| backend | `npm run reset` | Empty the database, the alert log and the NIDPS firewall chain |
+| backend | `npm run reset` | Empty the database, the alert log and NIDPS's own firewall rules |
 | frontend | `npm run dev` | Dashboard dev server on :5173 (talks to the backend on :5000) |
 | frontend | `npm run build` | Build the dashboard that the backend serves |
 
 ## Tech stack
 
-Node.js + Express · PostgreSQL · React 18 + Vite + Tailwind CSS · Snort 2.9 · iptables.
+Node.js + Express · PostgreSQL · React 18 + Vite + Tailwind CSS · Snort 2.9 · iptables / Windows Firewall.
 Tests use Node's built-in test runner; there are no runtime dependencies beyond
 Express, `pg`, `tail`, `dotenv` and `morgan`.

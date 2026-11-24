@@ -5,8 +5,8 @@ NIDPS can run in two modes. Pick one with `NIDPS_MODE` in `backend/.env`.
 | | **Host mode** (`host`, default) | **Gateway mode** (`gateway`) |
 |---|---|---|
 | Protects | The machine NIDPS runs on | Every machine on a small network routed *through* NIDPS |
-| Firewall chain | `INPUT` → `NIDPS` | `FORWARD` → `NIDPS` |
-| Hardware | One Linux machine (laptop or VM) | A Linux machine with **two** network ports (a USB-Ethernet adapter is fine) + a small switch |
+| Firewall | Linux: `INPUT` → `NIDPS` chain. Windows: Windows Firewall rules `NIDPS-block-<ip>` | `FORWARD` → `NIDPS` (Linux only) |
+| Hardware | One Linux **or Windows** machine (laptop or VM) | A Linux machine with **two** network ports (a USB-Ethernet adapter is fine) + a small switch |
 | Needs campus IT? | No | No (your demo network is your own); you only plug its WAN side into the campus network |
 | Demo story | "Attacker attacks the NIDPS server; NIDPS blocks the attacker" | "Attacker attacks a victim PC; NIDPS, sitting in the path, blocks the attacker before it reaches the victim" |
 
@@ -25,8 +25,9 @@ NIDPS can run in two modes. Pick one with `NIDPS_MODE` in `backend/.env`.
 |---|---|---|
 | **Native Linux laptop / mini-PC** | Host + gateway | Best choice. Everything behaves exactly as documented. |
 | **Linux VM, bridged networking** (VirtualBox/VMware "Bridged Adapter") | Host + gateway | The VM gets its own LAN IP. For gateway mode give the VM two bridged adapters. |
-| **Windows + WSL2 (default NAT networking)** | Development and the simulator only | WSL2 sits behind a private NAT: other LAN machines cannot reach it, and iptables in WSL protects only the WSL VM, **not Windows**. |
-| Windows + WSL2 with `networkingMode=mirrored` | Host mode with care | WSL shares the PC's LAN address, but iptables still only protects services running *inside* WSL. Run the "victim" services (sshd, a web server) in WSL. |
+| **Native Windows 10/11** (Snort for Windows + Windows Firewall) | Host mode | Protects Windows itself. See [Host mode on native Windows](#host-mode-on-native-windows). Gateway mode is not supported on Windows. |
+| Windows + WSL2 (default NAT networking, `NIDPS_FIREWALL=wsl`) | Development and the simulator only | WSL2 sits behind a private NAT: other LAN machines cannot reach it, and iptables in WSL protects only the WSL VM, **not Windows**. |
+| Windows + WSL2 with `networkingMode=mirrored` (`NIDPS_FIREWALL=wsl`) | Host mode with care | WSL shares the PC's LAN address, but iptables still only protects services running *inside* WSL. Run the "victim" services (sshd, a web server) in WSL. |
 
 To enable WSL mirrored networking, create `%UserProfile%\.wslconfig` with these lines, then run `wsl --shutdown`:
 
@@ -59,7 +60,7 @@ cd .. && docker compose --env-file backend/.env up -d
 Edit `backend/.env`:
 
 ```ini
-ENABLE_REAL_IPTABLES=true
+ENABLE_REAL_FIREWALL=true
 SNORT_LOG_PATH=/var/log/snort/snort.alert.fast
 NIDPS_ALLOWLIST=<gateway IP>,<DNS server IP>,<admin PC IP>
 DEMO_MODE=true          # keep the simulator for the presentation
@@ -124,6 +125,69 @@ New-NetFirewallRule -DisplayName "NIDPS dashboard" -Direction Inbound -Protocol 
 
 ---
 
+## Host mode on native Windows
+
+Everything runs on Windows itself: Snort for Windows captures traffic, and NIDPS blocks
+attackers with **Windows Firewall** rules named `NIDPS-block-<ip>` (one inbound, one
+outbound). NIDPS never touches any other firewall rule.
+
+```
+   Attacker PC  ──────── LAN / switch / hotspot ──────── Windows PC
+   192.168.1.20                                          192.168.1.10
+   (nmap, ssh, curl)                                     Snort + NIDPS + victim services
+```
+
+**Install once** (download these yourself from their official websites):
+1. **Npcap**, with *"Install Npcap in WinPcap API-compatible Mode"* ticked (Snort 2.9 needs it).
+2. **Snort 2.9 for Windows** (the installer), to the default folder `C:\Snort`.
+3. **Node.js LTS** (18 or later).
+
+**Set up** (PowerShell opened with *Run as administrator*, in the project folder):
+1. Find your address and network with `ipconfig` (for example `192.168.1.10`, mask `255.255.255.0`, so the network is `192.168.1.0/24`).
+2. `cd backend\scripts\windows`, then `.\setup-snort.ps1 -HomeNet 192.168.1.0/24`. It writes
+   `C:\Snort\etc\nidps.conf` and the rules, then lists your adapters. Note the **Index** of the
+   adapter that faces the network (Wi-Fi or Ethernet) and test it:
+   `.\setup-snort.ps1 -HomeNet 192.168.1.0/24 -Interface 3`.
+   If PowerShell refuses to run scripts: `Set-ExecutionPolicy -Scope Process Bypass` (this window only).
+3. In `backend\.env`:
+   ```ini
+   NIDPS_MODE=host
+   NIDPS_FIREWALL=auto
+   ENABLE_REAL_FIREWALL=true
+   SNORT_LOG_PATH=C:\Snort\log\snort.alert.fast
+   SNORT_INTERFACE=3
+   NIDPS_ALLOWLIST=192.168.1.1
+   ```
+4. Give the attacker something to hit. Windows drops pings and closed-port traffic by default,
+   so open what you want to demonstrate. These allow rules are yours; NIDPS's block rules still
+   win, because in Windows Firewall a block rule overrides an allow rule.
+   ```powershell
+   Enable-NetFirewallRule -Name FPS-ICMP4-ERQ-In        # answer pings
+   python -m http.server 8080                           # a victim web server (any app on 8080 works)
+   New-NetFirewallRule -DisplayName "Demo web 8080" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow
+   ```
+   Snort still sees SYN scans and SSH attempts to closed ports, so the Nmap and SSH
+   signatures work without opening anything.
+5. Start everything (two elevated PowerShell windows):
+   ```powershell
+   .\backend\scripts\windows\start-snort.ps1 -Interface 3
+   cd backend; npm start
+   ```
+   Without Administrator rights NIDPS stops at start-up with a clear message, rather than failing later.
+6. Pre-flight: `.\backend\scripts\windows\check-windows.ps1` must say "All 9 checks passed".
+7. Attack from the other PC exactly as in host mode above (`nmap -sS`, repeated `ssh`,
+   `curl "http://192.168.1.10:8080/?q=1%20union%20select%202"`).
+8. Verify: `Get-NetFirewallRule -DisplayName 'NIDPS-block-*' | Format-Table DisplayName,Direction,Action`
+   lists the attacker, and the attacker's `ping` now times out.
+
+Optional: `.\backend\scripts\windows\install-task.ps1 -SnortInterface 3` starts NIDPS and Snort
+automatically (elevated) when you sign in; `-Remove` undoes it.
+
+Windows Firewall rules survive a reboot, unlike iptables. NIDPS still removes every
+`NIDPS-block-*` rule at start-up and re-applies only the blocks that are active in its database.
+
+---
+
 ## Gateway mode (protect a network behind NIDPS)
 
 The attacker must be **outside** the protected network, so that its traffic has to pass
@@ -166,7 +230,7 @@ Steps:
 4. In `backend/.env`:
    ```ini
    NIDPS_MODE=gateway
-   ENABLE_REAL_IPTABLES=true
+   ENABLE_REAL_FIREWALL=true
    SNORT_INTERFACE=eth1
    NIDPS_ALLOWLIST=192.168.50.1
    ```
@@ -228,7 +292,7 @@ between the gateway and the victim, because modern network ports don't need a cr
    `setup_gateway.sh` refuses to continue if 192.168.50.0/24 overlaps the hotspot's own range.
    It also saves the `eth1` address as a permanent NetworkManager connection (`nidps-lan`), so it
    can't vanish mid-demo.
-4. In `backend/.env`, set `NIDPS_MODE=gateway`, `ENABLE_REAL_IPTABLES=true`, `SNORT_INTERFACE=eth1`,
+4. In `backend/.env`, set `NIDPS_MODE=gateway`, `ENABLE_REAL_FIREWALL=true`, `SNORT_INTERFACE=eth1`,
    `NIDPS_ALLOWLIST=192.168.50.1` and `BLOCK_DURATION_MIN=5`. Then start Snort and NIDPS:
    ```bash
    sudo ./backend/scripts/start_snort.sh eth1
@@ -311,4 +375,7 @@ To rehearse on a single Windows laptop, build the network from virtual machines:
 | `sudo: a password is required` in the log | sudo rule or wrapper missing | Re-run `setup_snort.sh … $USER`, or add the `/etc/sudoers.d/nidps` line above |
 | Gateway: victim has no internet | Forwarding/NAT not set, wrong interface names | Re-run `setup_gateway.sh` with the right names; `sysctl net.ipv4.ip_forward` must be 1 |
 | Blocks vanish after reboot | Expected for iptables | NIDPS re-applies active blocks on start-up; re-run `setup_gateway.sh` for NAT |
-| Locked yourself out | Your own IP was not on the allowlist | From the console: `sudo iptables -F NIDPS`, then add your IP to `NIDPS_ALLOWLIST` |
+| Locked yourself out | Your own IP was not on the allowlist | Linux console: `sudo iptables -F NIDPS`. Windows (elevated): `Get-NetFirewallRule -DisplayName 'NIDPS-block-*' \| Remove-NetFirewallRule`. Then add your IP to `NIDPS_ALLOWLIST` |
+| Windows: "needs Administrator rights" at start | PowerShell not elevated | Right-click PowerShell → *Run as administrator*, or set `ENABLE_REAL_FIREWALL=false` |
+| Windows: Snort lists no adapters or cannot open the interface | Npcap missing, or not in WinPcap-compatible mode | Reinstall Npcap with that box ticked; use the adapter **Index** from `snort -W`, not its name |
+| Windows: Snort runs but no alerts appear | Wrong adapter, or `SNORT_LOG_PATH` not set to `C:\Snort\log\snort.alert.fast` | Run `check-windows.ps1`; watch the log with `Get-Content C:\Snort\log\snort.alert.fast -Wait` |

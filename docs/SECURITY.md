@@ -30,6 +30,7 @@
 | 12 | In-memory fallback guessed from SQL strings (ignored updates, filters) | Real store interface, two implementations, one contract test suite |
 | 13 | Rules appended with `-A`; lost on reboot; reset ran `iptables -F INPUT` | Own `NIDPS` chain, inserted at the top, resynced on start-up; reset flushes only `NIDPS` |
 | 14 | WSL distro name hard-coded in three places | `WSL_DISTRO` setting |
+| 15 | On Windows, iptables in WSL did not protect Windows at all | Native Windows Firewall driver (`NIDPS_FIREWALL=windows`): netsh through `execFile` (no shell), validated IP, rules named `NIDPS-block-<ip>` so nothing else is ever removed; refuses to start the live firewall without Administrator rights |
 | 15 | Stale React effects caused racing refreshes | Single query state; event-driven refresh |
 | 16 | IP addresses (personal data) kept forever | `RETENTION_DAYS` (default 30) deletes old alerts, closed blocks and audit entries daily |
 | 17 | Google Fonts loaded from the internet | System fonts; the dashboard makes no third-party requests |

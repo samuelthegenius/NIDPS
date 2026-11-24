@@ -16,7 +16,8 @@
  4. services/detector.js           store the alert, then apply the policy:
         │                            P1 → block now · P2 → block after N in M minutes · P3 → log
         ▼
- 5. services/firewall/index.js     refuse protected IPs → per-IP lock → iptables -I NIDPS 1 -s IP -j DROP
+ 5. services/firewall/index.js     refuse protected IPs → per-IP lock → driver: iptables -I NIDPS 1 -s IP -j DROP (Linux)
+                                  or netsh add rule NIDPS-block-IP dir=in/out (Windows)
         │                            → save block + audit entry
         ▼
  6. services/events.js             publishes "alert" / "block" events
@@ -37,8 +38,10 @@
 | `services/snortParser.js` | Parses Snort fast-alert lines (IPv4/IPv6, local timestamps) |
 | `services/logWatcher.js` | Follows the alert file; survives truncation and rotation |
 | `services/detector.js` | Detection policy (P1 / P2 escalation / P3) |
+| `services/firewall/backend.js` | Picks the firewall driver from `NIDPS_FIREWALL` and the OS (Windows Firewall, iptables, or iptables in WSL) |
 | `services/firewall/commands.js` | Builds iptables argument lists for host/gateway, Linux/WSL, IPv4/IPv6 |
-| `services/firewall/index.js` | Block/unblock/expire/resync with locking, auditing and events |
+| `services/firewall/windows.js` | Builds netsh/PowerShell argument lists for Windows Firewall rules named `NIDPS-block-<ip>` |
+| `services/firewall/index.js` | Block/unblock/expire/resync with locking, auditing and events; the same engine drives either OS through a small driver (`prepare`, `apply`, `remove`) |
 | `services/events.js` | In-process event bus |
 | `store/memoryStore.js`, `store/pgStore.js` | The same data API over memory or PostgreSQL |
 | `auth/*` | scrypt password hashing, signed session cookies, login rate limiting |
@@ -52,7 +55,7 @@ The tests in `backend/test` mirror these files one-to-one.
 
 | Decision | Why |
 |---|---|
-| **A dedicated `NIDPS` iptables chain** | All NIDPS rules sit in one place, reached by one jump from `INPUT` or `FORWARD`. Reset flushes only NIDPS's rules, never the machine's other firewall rules. Switching host ↔ gateway mode only changes which chain jumps to it. |
+| **A dedicated `NIDPS` iptables chain** | All NIDPS rules sit in one place, reached by one jump from `INPUT` or `FORWARD`. Reset flushes only NIDPS's rules, never the machine's other firewall rules. Switching host ↔ gateway mode only changes which chain jumps to it. On Windows the equivalent is the `NIDPS-block-` name prefix: only rules with that prefix are ever removed. |
 | **Rules inserted at the top (`-I … 1`)** | An appended rule (`-A`) can sit behind an earlier ACCEPT and never match. |
 | **`execFile` with argument arrays, never a shell** | Together with strict IP validation, this makes command injection impossible: an "IP" like `1.2.3.4; reboot` is rejected before anything runs, and could never reach a shell anyway. |
 | **Allowlist checked before every block** | Attackers can spoof source addresses. Without an allowlist, a forged alert "from" the gateway would make NIDPS cut off the whole network (self-inflicted denial of service). |
@@ -62,7 +65,8 @@ The tests in `backend/test` mirror these files one-to-one.
 | **Server-Sent Events** | One-way live updates without polling, using plain HTTP. 15 s polling remains as a fallback. |
 | **Store interface with memory + PostgreSQL** | The demo still works if the database is down; both pass the same contract tests. |
 | **Dependency injection (`createX({ ... })`)** | Every part can be tested with fakes, for example a fake iptables, with no root and no network. |
-| **Resync on start-up** | iptables rules do not survive a reboot; NIDPS re-applies every active block from the database. |
+| **Resync on start-up** | iptables rules do not survive a reboot (Windows Firewall rules do, but may be stale); either way NIDPS removes its own old rules and re-applies every active block from the database. |
+| **One engine, two operating systems** | Locking, the allowlist, expiry and auditing are shared; only the few commands that change the firewall differ, so Linux and Windows behave the same and are tested the same way. |
 
 ## Data model (`backend/db/init.sql`)
 

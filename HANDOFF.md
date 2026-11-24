@@ -9,14 +9,15 @@ NIDPS is a final-year project: a **Network Intrusion Detection and Prevention Sy
 
 - **Snort** inspects network traffic and writes an alert line for every attack it recognises.
 - **The NIDPS backend** (Node.js) reads those lines, stores them, and **blocks attackers** with
-  iptables, either immediately (high severity) or after repeated attempts (medium severity).
+  the firewall (iptables on Linux, Windows Firewall on Windows), either immediately (high
+  severity) or after repeated attempts (medium severity).
 - **The dashboard** (React) shows everything live and lets an admin block, unblock and triage.
 
 It can protect the machine it runs on (**host mode**) or a small network behind it (**gateway mode**).
 
 ## 2. Run it on your laptop (10 minutes)
 
-You need Node.js 18+ and Git. Snort, Linux and PostgreSQL are **not** needed for this.
+You need Node.js 18+ and Git, on Windows, Linux or macOS. Snort and PostgreSQL are **not** needed for this.
 
 ```bash
 git clone <repository URL>
@@ -67,7 +68,8 @@ backend/
 frontend/src/                 React dashboard
 docs/                         architecture, LAN deployment, demo script, security
 docker-compose.yml            PostgreSQL (optional)
-start-snort.ps1               start Snort in WSL from Windows
+  scripts/windows/            Windows: Snort setup/start, pre-flight check, autostart
+  scripts/snort/nidps.rules   the demo Snort rules (used by Linux and Windows)
 ```
 
 ## 5. Working on it together
@@ -83,6 +85,8 @@ start-snort.ps1               start Snort in WSL from Windows
   `TEST_DATABASE_URL=postgres://postgres:<password>@localhost:5432/nidps_db npm test`.
   Note that this empties the tables.
 - The gateway and Snort setup scripts were syntax-checked but have not yet been run on a real dual-NIC machine.
-- On Windows, WSL2's default NAT networking means iptables in WSL does not protect Windows; use
-  a Linux machine or a bridged VM for the live LAN demo (explained in LAN_DEPLOYMENT.md).
+- Host mode runs natively on Windows (Snort for Windows + Windows Firewall) and on Linux (iptables).
+  Gateway mode is Linux only. The live Windows Firewall path is covered by tests with a fake `netsh`
+  but has not yet been run elevated on a real Windows machine with Snort installed:
+  run `backendscriptswindowscheck-windows.ps1` and one real block before the demo.
 - See "Remaining risks" in docs/SECURITY.md.
