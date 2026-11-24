@@ -5,13 +5,16 @@
  *   1. validates the IP (no shell is ever involved: commands run via execFile),
  *   2. refuses protected (allowlisted) addresses,
  *   3. runs at most one operation per IP at a time (per-IP lock),
- *   4. applies the iptables rule (or only logs it in simulated mode),
+ *   4. applies the rule through the platform driver - iptables on Linux, Windows
+ *      Firewall on Windows - or only logs it in simulated mode,
  *   5. records the block, an audit entry, and a live event for the dashboard.
  */
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { isValidIp, normalizeIp } = require('../../lib/ip');
 const { buildCommands } = require('./commands');
+const { buildWindowsCommands } = require('./windows');
+const { resolveBackend } = require('./backend');
 
 const execFileAsync = promisify(execFile);
 const defaultRun = (argv) => execFileAsync(argv[0], argv.slice(1), { timeout: 10000, windowsHide: true });
@@ -33,7 +36,7 @@ function createFirewall({
   platform = process.platform,
   isRoot = typeof process.getuid === 'function' && process.getuid() === 0,
 }) {
-  const commands = buildCommands({ mode: settings.mode, platform, wslDistro: settings.wslDistro, isRoot });
+  const backend = resolveBackend({ firewall: settings.firewall, platform, mode: settings.mode });
   const simulated = !settings.realFirewall;
   const locks = new Map();
 
@@ -52,17 +55,76 @@ function createFirewall({
   }
 
   const describe = (err) => (err && (err.stderr || err.message)) || String(err);
+  const driver = backend === 'windows' ? windowsDriver() : iptablesDriver();
 
-  /** Adds the DROP rule unless it is already present (-C succeeds). */
-  async function applyRule(ip) {
+  /** Runs `check`; if it fails (rule missing), runs `add`. */
+  async function ensure(check, add) {
     try {
-      await run(commands.check(ip));
-      return;
+      await run(check);
     } catch {
-      // rule not present yet
+      await run(add);
     }
-    await run(commands.block(ip));
   }
+
+  function iptablesDriver() {
+    const commands = buildCommands({ mode: settings.mode, platform, wslDistro: settings.wslDistro, isRoot, useWsl: backend === 'wsl' });
+    return {
+      commands,
+      label: `chain ${commands.chain} <- ${commands.parent}`,
+      blockText: (ip) => commands.block(ip).join(' '),
+      unblockText: (ip) => commands.unblock(ip).join(' '),
+      apply: (ip) => ensure(commands.check(ip), commands.block(ip)),
+      remove: (ip) => run(commands.unblock(ip)),
+      /** Creates the chain + jump (idempotent) and empties the NIDPS chain only. */
+      async prepare() {
+        for (const family of ['ipv4', 'ipv6']) {
+          const steps = commands.setup(family);
+          try {
+            await run(steps.create).catch(() => {}); // already exists
+            await run(commands.flush(family));
+            await ensure(steps.checkJump, steps.insertJump);
+          } catch (err) {
+            const level = family === 'ipv4' ? 'error' : 'warn';
+            console[level](`[FIREWALL] Could not set up ${family} NIDPS chain: ${describe(err)}`);
+          }
+        }
+      },
+    };
+  }
+
+  function windowsDriver() {
+    const commands = buildWindowsCommands();
+    return {
+      commands,
+      label: `Windows Firewall rules ${commands.prefix}*`,
+      blockText: (ip) => commands.directions.map((d) => commands.add(ip, d).join(' ')).join(' && '),
+      unblockText: (ip) => commands.remove(ip).join(' '),
+      /** One rule per direction; each is added only if missing, so a half-present block is completed. */
+      async apply(ip) {
+        for (const dir of commands.directions) await ensure(commands.check(ip, dir), commands.add(ip, dir));
+      },
+      remove: (ip) => run(commands.remove(ip)),
+      /** Needs an elevated process; then removes every NIDPS-block-* rule (and nothing else). */
+      async prepare() {
+        try {
+          await run(commands.adminCheck());
+        } catch {
+          throw new FirewallError(
+            'NOT_ADMIN',
+            'The live Windows firewall needs Administrator rights. Open PowerShell with "Run as administrator" and start NIDPS again, ' +
+              'or set ENABLE_REAL_FIREWALL=false to use the simulated firewall.'
+          );
+        }
+        try {
+          await run(commands.flush());
+        } catch (err) {
+          console.error(`[FIREWALL] Could not remove old NIDPS rules: ${describe(err)}`);
+        }
+      },
+    };
+  }
+
+  const applyRule = (ip) => driver.apply(ip);
 
   async function block(ip, reason, actor = 'system') {
     const address = cleanIp(ip);
@@ -82,7 +144,7 @@ function createFirewall({
       }
 
       if (simulated) {
-        console.log(`[FIREWALL SIMULATED] ${commands.block(address).join(' ')}`);
+        console.log(`[FIREWALL SIMULATED] ${driver.blockText(address)}`);
       } else {
         try {
           await applyRule(address);
@@ -114,10 +176,10 @@ function createFirewall({
       if (!existing) return { status: 'not_blocked' };
 
       if (simulated) {
-        console.log(`[FIREWALL SIMULATED] ${commands.unblock(address).join(' ')}`);
+        console.log(`[FIREWALL SIMULATED] ${driver.unblockText(address)}`);
       } else {
         try {
-          await run(commands.unblock(address));
+          await driver.remove(address);
         } catch (err) {
           // The rule may already be gone (e.g. after a reboot); the record is still closed.
           console.warn(`[FIREWALL] Unblock command for ${address} reported: ${describe(err)}`);
@@ -143,30 +205,16 @@ function createFirewall({
   }
 
   /**
-   * Creates the chain + jump (idempotent), empties the NIDPS chain (only NIDPS's own
-   * rules - nothing else is touched), then re-applies exactly the active blocks, so the
-   * kernel and the database always agree after a start-up.
+   * Lets the driver remove NIDPS's own old rules (nothing else is touched), then
+   * re-applies exactly the active blocks, so the firewall and the database always
+   * agree after a start-up.
    */
   async function init() {
     if (simulated) {
-      console.log(`[FIREWALL] Simulated mode (${settings.mode}): rules are logged, not applied.`);
+      console.log(`[FIREWALL] Simulated mode (${settings.mode}, ${backend}): rules are logged, not applied.`);
       return;
     }
-    for (const family of ['ipv4', 'ipv6']) {
-      const steps = commands.setup(family);
-      try {
-        await run(steps.create).catch(() => {}); // already exists
-        await run(commands.flush(family));
-        try {
-          await run(steps.checkJump);
-        } catch {
-          await run(steps.insertJump);
-        }
-      } catch (err) {
-        const level = family === 'ipv4' ? 'error' : 'warn';
-        console[level](`[FIREWALL] Could not set up ${family} NIDPS chain: ${describe(err)}`);
-      }
-    }
+    await driver.prepare();
     const active = await store.listBlocks(true);
     for (const b of active) {
       try {
@@ -175,7 +223,7 @@ function createFirewall({
         console.error(`[FIREWALL] Could not restore block for ${b.ip_address}: ${describe(err)}`);
       }
     }
-    console.log(`[FIREWALL] Live mode (${settings.mode}, chain ${commands.chain} <- ${commands.parent}); restored ${active.length} block(s).`);
+    console.log(`[FIREWALL] Live mode (${settings.mode}, ${driver.label}); restored ${active.length} block(s).`);
   }
 
   return {
@@ -186,7 +234,8 @@ function createFirewall({
     list: (activeOnly) => store.listBlocks(activeOnly),
     mode: settings.mode,
     simulated,
-    commands,
+    backend,
+    commands: driver.commands,
   };
 }
 

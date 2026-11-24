@@ -51,3 +51,15 @@ test('rejects a negative or non-numeric number setting', () => {
   assert.throws(() => loadSettings({ ESCALATE_COUNT: 'lots' }), /ESCALATE_COUNT/);
   assert.throws(() => loadSettings({ RETENTION_DAYS: '-1' }), /RETENTION_DAYS/);
 });
+
+test('NIDPS_FIREWALL defaults to auto and accepts windows, iptables and wsl', () => {
+  assert.equal(loadSettings({}).firewall, 'auto');
+  for (const v of ['windows', 'iptables', 'wsl', 'AUTO']) assert.equal(loadSettings({ NIDPS_FIREWALL: v }).firewall, v.toLowerCase());
+  assert.throws(() => loadSettings({ NIDPS_FIREWALL: 'pf' }), /NIDPS_FIREWALL/);
+});
+
+test('ENABLE_REAL_FIREWALL is an alias of ENABLE_REAL_IPTABLES', () => {
+  assert.equal(loadSettings({ ENABLE_REAL_FIREWALL: 'true' }).realFirewall, true);
+  assert.equal(loadSettings({ ENABLE_REAL_IPTABLES: 'true' }).realFirewall, true);
+  assert.equal(loadSettings({}).realFirewall, false);
+});

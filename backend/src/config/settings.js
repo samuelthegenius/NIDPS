@@ -34,12 +34,19 @@ function loadSettings(env = process.env) {
     throw new Error(`NIDPS_MODE must be "host" or "gateway" (got "${env.NIDPS_MODE}")`);
   }
 
+  const firewall = String(env.NIDPS_FIREWALL || 'auto').trim().toLowerCase();
+  if (!['auto', 'windows', 'iptables', 'wsl'].includes(firewall)) {
+    throw new Error(`NIDPS_FIREWALL must be "auto", "windows", "iptables" or "wsl" (got "${env.NIDPS_FIREWALL}")`);
+  }
+
   return Object.freeze({
     port: number(env, 'PORT', 5000),
     host: env.HOST || '0.0.0.0',
     mode,
     demoMode: bool(env.DEMO_MODE),
-    realFirewall: bool(env.ENABLE_REAL_IPTABLES),
+    // ENABLE_REAL_FIREWALL is the platform-neutral name; ENABLE_REAL_IPTABLES still works.
+    realFirewall: bool(env.ENABLE_REAL_FIREWALL) || bool(env.ENABLE_REAL_IPTABLES),
+    firewall,
     wslDistro: env.WSL_DISTRO || 'Ubuntu-24.04',
     // Relative paths are relative to backend/, whatever directory NIDPS is started from.
     snortLogPath: path.resolve(BACKEND_DIR, env.SNORT_LOG_PATH || 'mock_snort.log'),

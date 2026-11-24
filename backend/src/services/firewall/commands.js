@@ -13,12 +13,12 @@ const CHAIN = 'NIDPS';
 // Granting sudo on plain iptables would be root-equivalent (iptables --modprobe=<program>).
 const SUDO_WRAPPER = '/usr/local/sbin/nidps-iptables';
 
-function buildCommands({ mode = 'host', platform = process.platform, wslDistro = 'Ubuntu-24.04', isRoot = false }) {
+function buildCommands({ mode = 'host', platform = process.platform, wslDistro = 'Ubuntu-24.04', isRoot = false, useWsl = platform === 'win32' }) {
   const parent = mode === 'gateway' ? 'FORWARD' : 'INPUT';
   const tool = (family) => (family === 'ipv6' ? 'ip6tables' : 'iptables');
 
   function prefix(family) {
-    if (platform === 'win32') return ['wsl', '-d', wslDistro, '-u', 'root', tool(family)];
+    if (useWsl) return ['wsl', '-d', wslDistro, '-u', 'root', tool(family)];
     return isRoot ? [tool(family)] : ['sudo', '-n', SUDO_WRAPPER, tool(family)];
   }
   const familyOf = (ip) => (net.isIPv6(ip) ? 'ipv6' : 'ipv4');
