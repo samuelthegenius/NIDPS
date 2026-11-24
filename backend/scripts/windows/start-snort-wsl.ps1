@@ -1,6 +1,6 @@
-# Start the Snort sensor inside WSL (Windows development / demo machine).
-#   .\start-snort.ps1                       # Ubuntu-24.04, eth0
-#   .\start-snort.ps1 -Distro Ubuntu-24.04 -Interface eth0
+# Start the Snort sensor inside WSL (older setup; native Windows uses start-snort.ps1).
+#   .\start-snort-wsl.ps1                       # Ubuntu-24.04, eth0
+#   .\start-snort-wsl.ps1 -Distro Ubuntu-24.04 -Interface eth0
 param(
     [string]$Distro = "Ubuntu-24.04",
     [string]$Interface = "eth0"
