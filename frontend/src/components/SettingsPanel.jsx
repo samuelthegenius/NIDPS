@@ -25,7 +25,7 @@ export default function SettingsPanel({ settings }) {
         <h3 className="flex items-center gap-2 text-sm font-semibold text-white mb-3 font-sans">
           <Settings className="w-4 h-4 text-sky-400" /> Engine configuration
         </h3>
-        <Row label="Deployment mode" value={settings.mode === 'gateway' ? 'Gateway (FORWARD)' : 'Host (INPUT)'} hint="Host protects this machine; gateway protects the network routed through it." />
+        <Row label="Deployment mode" value={settings.mode === 'gateway' ? 'Gateway (FORWARD)' : settings.firewall === 'windows' ? 'Host (Windows Firewall)' : 'Host (INPUT)'} hint="Host protects this machine; gateway protects the network routed through it." />
         <Row label="Firewall" value={`${settings.realFirewall ? 'LIVE' : 'Simulated'} · ${FIREWALL_NAMES[settings.firewall] || settings.firewall || 'iptables'}`} hint="Simulated mode logs the exact firewall command without running it." />
         <Row label="Demo mode" value={settings.demoMode ? 'On (simulator enabled)' : 'Off'} />
         <Row label="Block duration" value={minutes(settings.blockDurationMin)} hint="Blocks are lifted automatically after this time." />

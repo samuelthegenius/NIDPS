@@ -17,7 +17,11 @@ const { buildWindowsCommands } = require('./windows');
 const { resolveBackend } = require('./backend');
 
 const execFileAsync = promisify(execFile);
-const defaultRun = (argv) => execFileAsync(argv[0], argv.slice(1), { timeout: 10000, windowsHide: true });
+const defaultRun = (argv, options = {}) => execFileAsync(argv[0], argv.slice(1), { timeout: 10000, windowsHide: true, ...options });
+// Windows: re-checking an already-blocked IP costs two netsh processes, and Snort keeps
+// alerting on a blocked scanner (it sees packets before the firewall drops them), so the
+// check is repeated at most this often per IP.
+const WINDOWS_RECHECK_MS = 30000;
 
 class FirewallError extends Error {
   constructor(code, message) {
@@ -74,6 +78,7 @@ function createFirewall({
       blockText: (ip) => commands.block(ip).join(' '),
       unblockText: (ip) => commands.unblock(ip).join(' '),
       apply: (ip) => ensure(commands.check(ip), commands.block(ip)),
+      heal: (ip) => ensure(commands.check(ip), commands.block(ip)), // one cheap `iptables -C`
       remove: (ip) => run(commands.unblock(ip)),
       /** Creates the chain + jump (idempotent) and empties the NIDPS chain only. */
       async prepare() {
@@ -94,16 +99,27 @@ function createFirewall({
 
   function windowsDriver() {
     const commands = buildWindowsCommands();
+    const verifiedAt = new Map();
+    async function apply(ip) {
+      for (const dir of commands.directions) await ensure(commands.check(ip, dir), commands.add(ip, dir));
+      verifiedAt.set(ip, now().getTime());
+    }
     return {
       commands,
       label: `Windows Firewall rules ${commands.prefix}*`,
       blockText: (ip) => commands.directions.map((d) => commands.add(ip, d).join(' ')).join(' && '),
       unblockText: (ip) => commands.remove(ip).join(' '),
       /** One rule per direction; each is added only if missing, so a half-present block is completed. */
-      async apply(ip) {
-        for (const dir of commands.directions) await ensure(commands.check(ip, dir), commands.add(ip, dir));
+      apply,
+      async heal(ip) {
+        const last = verifiedAt.get(ip);
+        if (last !== undefined && now().getTime() - last < WINDOWS_RECHECK_MS) return;
+        await apply(ip);
       },
-      remove: (ip) => run(commands.remove(ip)),
+      remove: (ip) => {
+        verifiedAt.delete(ip);
+        return run(commands.remove(ip));
+      },
       /** Needs an elevated process; then removes every NIDPS-block-* rule (and nothing else). */
       async prepare() {
         try {
@@ -116,7 +132,7 @@ function createFirewall({
           );
         }
         try {
-          await run(commands.flush());
+          await run(commands.flush(), { timeout: 120000 });
         } catch (err) {
           console.error(`[FIREWALL] Could not remove old NIDPS rules: ${describe(err)}`);
         }
@@ -139,7 +155,7 @@ function createFirewall({
       if (existing) {
         // Self-heal: the record says "blocked" but the rule may have been flushed
         // (reset, reboot, manual iptables -F). applyRule checks with -C first.
-        if (!simulated) await applyRule(address).catch((err) => console.error(`[FIREWALL] Could not re-apply ${address}: ${describe(err)}`));
+        if (!simulated) await driver.heal(address).catch((err) => console.error(`[FIREWALL] Could not re-apply ${address}: ${describe(err)}`));
         return { status: 'already', block: existing };
       }
 

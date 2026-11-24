@@ -13,6 +13,7 @@ const { createStore } = require('./store');
 const { createAllowlist } = require('./lib/allowlist');
 const { createEventBus } = require('./services/events');
 const { createFirewall } = require('./services/firewall');
+const { backendWarnings } = require('./services/firewall/backend');
 const { createDetector } = require('./services/detector');
 const { createLogWatcher } = require('./services/logWatcher');
 const { createMaintenance } = require('./jobs/maintenance');
@@ -41,6 +42,8 @@ async function main() {
   const events = createEventBus();
   const allowlist = createAllowlist({ entries: settings.allowlist });
   const firewall = createFirewall({ settings, store, allowlist, events });
+  console.log(`[NIDPS] Firewall driver: ${firewall.backend} (NIDPS_FIREWALL=${settings.firewall})`);
+  for (const w of backendWarnings({ backend: firewall.backend, snortLogPath: settings.snortLogPath })) console.warn(`[NIDPS] WARNING: ${w}`);
   await firewall.init();
   const detector = createDetector({ store, firewall, settings, events });
   const watcher = createLogWatcher({ path: settings.snortLogPath, onLine: (line) => detector.handleLine(line) });

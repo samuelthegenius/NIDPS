@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { buildWindowsCommands } = require('../src/services/firewall/windows');
-const { resolveBackend } = require('../src/services/firewall/backend');
+const { resolveBackend, backendWarnings } = require('../src/services/firewall/backend');
 const { createFirewall } = require('../src/services/firewall');
 const { createMemoryStore } = require('../src/store/memoryStore');
 const { createAllowlist } = require('../src/lib/allowlist');
@@ -11,15 +11,18 @@ const arg = (argv, key) => (argv.find((a) => a.startsWith(`${key}=`)) || '').sli
 
 /** Fake Windows: netsh keeps a rule table, `net session` fails unless admin. */
 function setup({ env = {}, admin = true } = {}) {
+  const clock = { t: new Date('2026-11-24T12:00:00Z').getTime() };
   const settings = loadSettings({ ENABLE_REAL_FIREWALL: 'true', ...env });
   const store = createMemoryStore();
   const calls = [];
   const rules = new Set(); // "<name>|<dir>"
   const fail = (msg) => Object.assign(new Error(msg), { code: 1, stderr: msg });
-  const run = async (argv) => {
+  const runOptions = [];
+  const run = async (argv, options) => {
     calls.push(argv);
+    runOptions.push(options);
     const [cmd] = argv;
-    if (cmd === 'net') {
+    if (cmd === 'fltmc') {
       if (!admin) throw fail('System error 5 has occurred. Access is denied.');
     } else if (cmd === 'powershell.exe') {
       for (const r of [...rules]) if (r.startsWith('NIDPS-block-')) rules.delete(r);
@@ -44,8 +47,9 @@ function setup({ env = {}, admin = true } = {}) {
     allowlist: createAllowlist({ entries: ['10.0.0.1'], includeLocal: false }),
     run,
     platform: 'win32',
+    now: () => new Date(clock.t),
   });
-  return { firewall, store, calls, rules };
+  return { firewall, store, calls, rules, runOptions, clock };
 }
 
 test('windows commands are netsh argv arrays with one named rule per direction', () => {
@@ -55,7 +59,7 @@ test('windows commands are netsh argv arrays with one named rule per direction',
   ]);
   assert.deepEqual(c.check('2001:db8::1', 'out'), ['netsh', 'advfirewall', 'firewall', 'show', 'rule', 'name=NIDPS-block-2001:db8::1', 'dir=out']);
   assert.deepEqual(c.remove('198.51.100.7'), ['netsh', 'advfirewall', 'firewall', 'delete', 'rule', 'name=NIDPS-block-198.51.100.7']);
-  assert.deepEqual(c.adminCheck(), ['net', 'session']);
+  assert.deepEqual(c.adminCheck(), ['fltmc']);
   const flush = c.flush();
   assert.equal(flush[0], 'powershell.exe');
   assert.match(flush.at(-1), /Get-NetFirewallRule -DisplayName 'NIDPS-block-\*'.*\| Remove-NetFirewallRule/);
@@ -107,9 +111,10 @@ test('IPv6 attackers are blocked by name and remoteip', async () => {
 });
 
 test('a half-present block (only the inbound rule) is completed, not duplicated', async () => {
-  const { firewall, rules, calls } = setup();
+  const { firewall, rules, calls, clock } = setup();
   await firewall.block('198.51.100.7', 'x', 'system');
   rules.delete('NIDPS-block-198.51.100.7|out');
+  clock.t += 31000; // past the re-check interval
   calls.length = 0;
   assert.equal((await firewall.block('198.51.100.7', 'again', 'system')).status, 'already');
   const adds = calls.filter((c) => c[3] === 'add');
@@ -123,7 +128,7 @@ test('init checks for admin, removes stale NIDPS rules and re-applies active blo
   rules.add('Someone else|in'); // not ours: must survive
   await store.insertBlock({ ip_address: '1.1.1.1', block_reason: 'x', expires_at: null, created_by: 'system' });
   await firewall.init();
-  assert.deepEqual(calls[0], ['net', 'session']);
+  assert.deepEqual(calls[0], ['fltmc']);
   assert.ok(!rules.has('NIDPS-block-9.9.9.9|in'));
   assert.ok(rules.has('Someone else|in'));
   assert.ok(rules.has('NIDPS-block-1.1.1.1|in') && rules.has('NIDPS-block-1.1.1.1|out'));
@@ -154,4 +159,30 @@ test('a refused gateway + windows combination stops createFirewall', () => {
       }),
     /gateway mode/i
   );
+});
+
+test('the start-up flush gets a long timeout (PowerShell is slow to start)', async () => {
+  const { firewall, calls, runOptions } = setup();
+  await firewall.init();
+  const i = calls.findIndex((c) => c[0] === 'powershell.exe');
+  assert.ok(runOptions[i] && runOptions[i].timeout >= 60000, 'flush timeout >= 60 s');
+});
+
+test('repeated alerts from an already-blocked IP re-check Windows Firewall at most every 30 s', async () => {
+  const { firewall, calls, clock } = setup();
+  await firewall.block('198.51.100.7', 'scan', 'system');
+  calls.length = 0;
+  for (let i = 0; i < 50; i++) await firewall.block('198.51.100.7', 'scan', 'system');
+  assert.equal(calls.length, 0, 'no netsh calls within 30 s of the last check');
+  clock.t += 31000;
+  await firewall.block('198.51.100.7', 'scan', 'system');
+  assert.equal(calls.length, 2, 'one show-rule per direction after 30 s');
+});
+
+test('warns when Windows Firewall is used but Snort writes inside WSL', () => {
+  const w = backendWarnings({ backend: 'windows', snortLogPath: String.raw`\\wsl.localhost\Ubuntu-24.04\var\log\snort\snort.alert.fast` });
+  assert.equal(w.length, 1);
+  assert.match(w[0], /WSL/);
+  assert.deepEqual(backendWarnings({ backend: 'windows', snortLogPath: String.raw`C:\Snort\log\snort.alert.fast` }), []);
+  assert.deepEqual(backendWarnings({ backend: 'wsl', snortLogPath: String.raw`\\wsl$\Ubuntu\x` }), []);
 });

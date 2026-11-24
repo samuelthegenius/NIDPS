@@ -25,4 +25,16 @@ function resolveBackend({ firewall = 'auto', platform = process.platform, mode =
   return choice;
 }
 
-module.exports = { resolveBackend };
+/** Start-up warnings for setups that run but will not do what the user expects. */
+function backendWarnings({ backend, snortLogPath = '' }) {
+  const warnings = [];
+  if (backend === 'windows' && /^[\\/]{2}wsl(\.localhost|\$)/i.test(snortLogPath)) {
+    warnings.push(
+      "Windows Firewall blocks traffic to Windows, but SNORT_LOG_PATH points inside WSL, so Snort is watching WSL's network. " +
+        'Use native Snort for Windows (docs/LAN_DEPLOYMENT.md, "Host mode on native Windows"), or set NIDPS_FIREWALL=wsl for the old WSL setup.'
+    );
+  }
+  return warnings;
+}
+
+module.exports = { resolveBackend, backendWarnings };

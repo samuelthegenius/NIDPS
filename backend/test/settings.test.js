@@ -58,6 +58,10 @@ test('NIDPS_FIREWALL defaults to auto and accepts windows, iptables and wsl', ()
   assert.throws(() => loadSettings({ NIDPS_FIREWALL: 'pf' }), /NIDPS_FIREWALL/);
 });
 
+test('ENABLE_REAL_FIREWALL, when set, overrides the old ENABLE_REAL_IPTABLES', () => {
+  assert.equal(loadSettings({ ENABLE_REAL_FIREWALL: 'false', ENABLE_REAL_IPTABLES: 'true' }).realFirewall, false);
+});
+
 test('ENABLE_REAL_FIREWALL is an alias of ENABLE_REAL_IPTABLES', () => {
   assert.equal(loadSettings({ ENABLE_REAL_FIREWALL: 'true' }).realFirewall, true);
   assert.equal(loadSettings({ ENABLE_REAL_IPTABLES: 'true' }).realFirewall, true);

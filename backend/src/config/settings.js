@@ -44,8 +44,9 @@ function loadSettings(env = process.env) {
     host: env.HOST || '0.0.0.0',
     mode,
     demoMode: bool(env.DEMO_MODE),
-    // ENABLE_REAL_FIREWALL is the platform-neutral name; ENABLE_REAL_IPTABLES still works.
-    realFirewall: bool(env.ENABLE_REAL_FIREWALL) || bool(env.ENABLE_REAL_IPTABLES),
+    // ENABLE_REAL_FIREWALL is the platform-neutral name and wins when set;
+    // the older ENABLE_REAL_IPTABLES is used only when it is not.
+    realFirewall: bool(env.ENABLE_REAL_FIREWALL, bool(env.ENABLE_REAL_IPTABLES)),
     firewall,
     wslDistro: env.WSL_DISTRO || 'Ubuntu-24.04',
     // Relative paths are relative to backend/, whatever directory NIDPS is started from.

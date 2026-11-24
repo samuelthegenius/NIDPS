@@ -26,8 +26,9 @@ function buildWindowsCommands() {
       '-Command',
       `Get-NetFirewallRule -DisplayName '${RULE_PREFIX}*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule`,
     ],
-    // `net session` succeeds only in an elevated (Run as administrator) process.
-    adminCheck: () => ['net', 'session'],
+    // `fltmc` succeeds only in an elevated (Run as administrator) process. Unlike
+    // `net session` it does not depend on the Server service being enabled.
+    adminCheck: () => ['fltmc'],
   };
 }
 

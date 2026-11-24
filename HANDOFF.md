@@ -88,5 +88,5 @@ docker-compose.yml            PostgreSQL (optional)
 - Host mode runs natively on Windows (Snort for Windows + Windows Firewall) and on Linux (iptables).
   Gateway mode is Linux only. The live Windows Firewall path is covered by tests with a fake `netsh`
   but has not yet been run elevated on a real Windows machine with Snort installed:
-  run `backendscriptswindowscheck-windows.ps1` and one real block before the demo.
+  run `backend\scripts\windows\check-windows.ps1` and one real block before the demo.
 - See "Remaining risks" in docs/SECURITY.md.

@@ -21,6 +21,7 @@ const run = promisify(execFile);
 
 async function main() {
   const settings = loadSettings();
+  const backend = resolveBackend({ firewall: settings.firewall, mode: settings.mode }); // fail before changing anything
   console.log('Resetting NIDPS...');
 
   try {
@@ -40,7 +41,6 @@ async function main() {
     console.log(`  - Could not empty ${logPath}: ${err.message}`);
   }
 
-  const backend = resolveBackend({ firewall: settings.firewall, mode: settings.mode });
   if (settings.realFirewall && backend === 'windows') {
     const argv = buildWindowsCommands().flush();
     try {
