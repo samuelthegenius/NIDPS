@@ -10,7 +10,8 @@
     "simulate": "node scripts/generateMockLogs.js",
     "reset": "node scripts/resetData.js",
     "test": "node --test --test-concurrency=1 \"test/*.test.js\"",
-    "setup": "node scripts/setup-admin.js"
+    "setup": "node scripts/setup-admin.js",
+    "test:scripts": "bash test/nidps-iptables.cases.sh && bash test/check_gateway.cases.sh"
   },
   "keywords": [
     "nidps",

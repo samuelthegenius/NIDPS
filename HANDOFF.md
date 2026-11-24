@@ -33,7 +33,7 @@ npm start
 Open http://localhost:5000, sign in as `admin`, and click **Simulate Attack → Apache Log4j → Inject**.
 The alert appears and the attacker is blocked within a second. Then try *SSH Brute Force* five times.
 
-Run the tests with `cd backend && npm test`. They should all pass.
+Run the tests with `cd backend && npm test` (and `npm run test:scripts` for the shell scripts, from Git Bash or Linux). They should all pass.
 
 ## 3. Read in this order (about 1 hour)
 

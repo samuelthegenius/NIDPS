@@ -55,6 +55,7 @@ persistent storage, set `DB_PASSWORD` in `backend/.env` and run
 | backend | `npm start` | Run NIDPS (API + dashboard on port 5000) |
 | backend | `npm run dev` | Run with auto-restart while editing |
 | backend | `npm test` | Run the automated test suite |
+| backend | `npm run test:scripts` | Test the firewall wrapper and gateway pre-flight scripts (needs bash) |
 | backend | `npm run setup` | Set or change the admin password |
 | backend | `npm run simulate` | Append 3 sample alerts to the Snort log |
 | backend | `npm run reset` | Empty the database, the alert log and the NIDPS firewall chain |

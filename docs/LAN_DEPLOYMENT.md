@@ -191,6 +191,114 @@ Steps:
 Many campus networks drop traffic for routes they don't know about. If step 7 fails, connect the
 attacker and the gateway's WAN port to your own small switch or phone hotspot.
 
+**Right before the demo, run the pre-flight check on the gateway.** It changes nothing. It shows
+PASS or FAIL with a fix for each item, then prints the attacker's route command using the
+gateway's *current* outside address:
+
+```bash
+sudo ./backend/scripts/check_gateway.sh wlan0 eth1 192.168.50.0/24 192.168.50.10
+```
+
+---
+
+## Gateway mode without a switch: phone hotspot
+
+This needs three machines (attacker, Linux gateway with a USB-Ethernet adapter, victim), one
+phone and one Ethernet cable. No switch or router.
+
+```
+ Attacker ~~Wi-Fi~~ Phone hotspot ~~Wi-Fi~~ [ NIDPS gateway ] ══cable══ Victim
+                     (the "outside")        wlan0       eth1          192.168.50.10
+```
+
+The phone simply passes packets between the attacker and the gateway's Wi-Fi. The gateway
+forwards them out of `eth1` to the victim. Snort on `eth1` sees the attack, and NIDPS drops the
+attacker in `FORWARD` before anything else reaches the victim. Any normal Ethernet cable works
+between the gateway and the victim, because modern network ports don't need a crossover cable.
+
+### Set it up
+
+1. Connect the gateway's Wi-Fi and the attacker to the hotspot. Plug the cable between the gateway's adapter and the victim.
+2. On the gateway, run `ip -br addr`. It shows the Wi-Fi name and address (for example `wlan0` with 10.42.0.15) and the adapter name (for example `eth1`).
+3. On the gateway:
+   ```bash
+   sudo ./backend/scripts/setup_gateway.sh wlan0 eth1 192.168.50.0/24
+   sudo ./backend/scripts/setup_snort.sh eth1 192.168.50.0/24 $USER
+   ```
+   `setup_gateway.sh` refuses to continue if 192.168.50.0/24 overlaps the hotspot's own range.
+   It also saves the `eth1` address as a permanent NetworkManager connection (`nidps-lan`), so it
+   can't vanish mid-demo.
+4. In `backend/.env`, set `NIDPS_MODE=gateway`, `ENABLE_REAL_IPTABLES=true`, `SNORT_INTERFACE=eth1`,
+   `NIDPS_ALLOWLIST=192.168.50.1` and `BLOCK_DURATION_MIN=5`. Then start Snort and NIDPS:
+   ```bash
+   sudo ./backend/scripts/start_snort.sh eth1
+   cd backend && npm start
+   ```
+5. Give the victim a fixed address: 192.168.50.10, mask 255.255.255.0, gateway 192.168.50.1,
+   DNS 1.1.1.1. Use a **Linux victim with SSH**, or run `python -m http.server 80` on it, so there
+   is something to see before the block. A Windows victim's firewall drops pings and has no open
+   ports by default.
+
+   On a Windows victim, in an administrator PowerShell (check the adapter name with `Get-NetAdapter`):
+
+   ```powershell
+   New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.50.10 -PrefixLength 24 -DefaultGateway 192.168.50.1
+   ```
+   ```powershell
+   Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses 1.1.1.1
+   ```
+6. Run the pre-flight check on the gateway and copy the attacker commands it prints:
+   ```bash
+   sudo ./backend/scripts/check_gateway.sh wlan0 eth1 192.168.50.0/24 192.168.50.10
+   ```
+7. Show the dashboard on the **gateway's own screen**. If you open it on the attacker laptop, that
+   view stops updating as soon as the attacker is blocked.
+
+### Pre-flight: all 7 must pass before you attack
+
+| # | Where | Check | Expected | If not |
+|---|---|---|---|---|
+| 1 | Gateway | `sudo ./backend/scripts/check_gateway.sh …` | "All 9 checks passed" | Follow the `fix:` line under each FAIL |
+| 2 | Attacker | `ping <gateway hotspot IP>` | Replies | The phone isolates hotspot clients: use a cheap travel router instead |
+| 3 | Victim | `ping 1.1.1.1` | Replies (internet through the gateway) | Victim's gateway setting, or re-run `setup_gateway.sh` |
+| 4 | Attacker | Add the printed route, then `ping 192.168.50.10` | Replies | Route uses an old gateway address: re-run the check and copy again |
+| 5 | Attacker | `curl http://192.168.50.10` or `ssh x@192.168.50.10` | The victim answers | Start the web server or SSH on the victim |
+| 6 | Dashboard | Settings tab | Gateway mode, Live firewall, log watcher ACTIVE | `backend/.env`, or Snort not running |
+| 7 | Phone | Hotspot settings | Plugged in; "turn off hotspot automatically" disabled | Phones drop idle hotspots |
+
+Then attack: `nmap -sS 192.168.50.10`. Expected result: an alert and an automatic block within
+about a second. Checks 4 and 5 now fail from the attacker, while the victim's internet keeps
+working. Between rehearsals, run `npm run reset` (or wait 5 minutes for the block to expire),
+and re-run the pre-flight check after every hotspot reconnect.
+
+### Why each check is there
+
+| Risk | Covered by |
+|---|---|
+| Some phones stop hotspot clients talking to each other (it varies by brand and model) | Check 2. The fallback is any Wi-Fi router as the "outside". |
+| The phone gives the gateway a different address on each connection | `check_gateway.sh` prints the route with the current address |
+| NetworkManager removes the gateway's inside address | `setup_gateway.sh` saves it as the `nidps-lan` connection |
+| The hotspot's range clashes with 192.168.50.0/24 | `setup_gateway.sh` refuses; pick another, e.g. 192.168.77.0/24 |
+| The presenter's own view gets blocked | Show the dashboard on the gateway (its own addresses are always protected) |
+| nmap on a Windows attacker | Install nmap with Npcap; run `nmap -sS` from an administrator terminal |
+| A block left over from rehearsal | `BLOCK_DURATION_MIN=5`, `npm run reset` |
+
+---
+
+## Gateway mode on one PC: VirtualBox (no extra hardware)
+
+To rehearse on a single Windows laptop, build the network from virtual machines:
+
+```
+ Windows (attacker) ── Host-only network ── [ Ubuntu gateway VM ] ── Internal network "nidps-lan" ── Victim VM
+                        192.168.56.x         adapter 1  adapter 2                                     192.168.50.10
+```
+
+1. **Gateway VM (Ubuntu):** Adapter 1 is "Host-only Adapter" (outside), Adapter 2 is "Internal Network" named `nidps-lan` (inside).
+2. **Victim VM:** one adapter on Internal Network `nidps-lan`. Address 192.168.50.10/24, gateway 192.168.50.1.
+3. In the gateway VM, run the same steps as above, using its two adapter names from `ip -br addr`. Then run `check_gateway.sh`. The victim-internet check (pre-flight check 3) will fail here because host-only networks have no internet, and that's fine for the attack demo.
+4. The **attacker is Windows itself**: add the route that `check_gateway.sh` prints, then run nmap from an administrator PowerShell.
+
 ---
 
 ## Troubleshooting

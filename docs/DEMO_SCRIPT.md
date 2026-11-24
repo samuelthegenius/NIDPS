@@ -16,6 +16,7 @@ Plan to run B, and keep A ready in a second browser tab in case the network misb
 - [ ] `npm run reset` run, so the dashboard starts at zero.
 - [ ] `backend/.env`: `DEMO_MODE=true`; `BLOCK_DURATION_MIN=5` (short, so the expiry can be shown); `NIDPS_ALLOWLIST` holds your own laptop's IP.
 - [ ] Live demo only: Snort running (`sudo ./backend/scripts/start_snort.sh <if>`), attacker PC can ping the target, `ENABLE_REAL_IPTABLES=true`.
+- [ ] Gateway demo only: `sudo ./backend/scripts/check_gateway.sh <wan_if> <lan_if> <lan_cidr> <victim_ip>` says "All 9 checks passed", and the 7-point pre-flight in [LAN_DEPLOYMENT.md](LAN_DEPLOYMENT.md#gateway-mode-without-a-switch-phone-hotspot) is done. Re-run it after every hotspot reconnect.
 - [ ] Browser zoom set so the whole dashboard fits on the projector.
 - [ ] A terminal open on the NIDPS machine with `watch -n1 sudo iptables -L NIDPS -n -v` (live demo).
 

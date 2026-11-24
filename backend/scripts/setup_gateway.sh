@@ -27,9 +27,30 @@ add_rule() { # add_rule <table> <chain> <rule...>  - only if not already present
   iptables -t "$table" -C "$chain" "$@" 2>/dev/null || iptables -t "$table" -A "$chain" "$@"
 }
 
+ip2int() { local IFS=.; read -r a b c d <<<"$1"; echo $(( (a << 24) | (b << 16) | (c << 8) | d )); }
+WAN_ADDR=$(ip -4 -o addr show dev "$WAN" | awk '{print $4}' | head -1)
+if [[ -n $WAN_ADDR ]]; then
+  p1=${WAN_ADDR#*/}; p2=${LAN_CIDR#*/}; p=$(( p1 < p2 ? p1 : p2 ))
+  mask=$(( (0xFFFFFFFF << (32 - p)) & 0xFFFFFFFF ))
+  if (( ($(ip2int "${WAN_ADDR%/*}") & mask) == ($(ip2int "${LAN_CIDR%/*}") & mask) )); then
+    echo "Inside range $LAN_CIDR overlaps the outside network $WAN_ADDR. Pick another, e.g.: $0 $WAN $LAN 192.168.77.0/24" >&2
+    exit 1
+  fi
+fi
+
 echo "[*] LAN interface $LAN -> $LAN_ADDR"
-ip link set "$LAN" up
-ip addr show dev "$LAN" | grep -q "inet ${LAN_ADDR%/*}/" || ip addr add "$LAN_ADDR" dev "$LAN"
+if command -v nmcli >/dev/null 2>&1 && nmcli -t -f DEVICE device status 2>/dev/null | grep -qx "$LAN"; then
+  # NetworkManager manages this port: save the address as a permanent connection,
+  # otherwise NM may look for DHCP on it and remove the address mid-demo.
+  nmcli con delete nidps-lan >/dev/null 2>&1 || true
+  nmcli con add type ethernet ifname "$LAN" con-name nidps-lan ipv4.method manual \
+    ipv4.addresses "$LAN_ADDR" ipv6.method disabled connection.autoconnect yes >/dev/null
+  nmcli con up nidps-lan >/dev/null
+  echo "    saved as NetworkManager connection 'nidps-lan' (survives reconnects and reboots)"
+else
+  ip link set "$LAN" up
+  ip addr show dev "$LAN" | grep -q "inet ${LAN_ADDR%/*}/" || ip addr add "$LAN_ADDR" dev "$LAN"
+fi
 
 echo "[*] Enabling IPv4 forwarding (persistent)"
 sysctl -qw net.ipv4.ip_forward=1
@@ -52,7 +73,7 @@ cat <<EOF
     Snort             : sudo ./start_snort.sh $LAN
     backend/.env      : NIDPS_MODE=gateway  ENABLE_REAL_IPTABLES=true  SNORT_INTERFACE=$LAN
                         NIDPS_ALLOWLIST=${LAN_ADDR%/*}
-    Check             : sudo iptables -L FORWARD -n --line-numbers ; sudo iptables -L NIDPS -n -v
+    Pre-flight check  : sudo ./check_gateway.sh $WAN $LAN $LAN_CIDR   (run right before the demo)
 Note: iptables rules added here are not saved across reboots. Re-run this script,
 or install iptables-persistent. NIDPS re-creates its own NIDPS rules on start-up.
 EOF
